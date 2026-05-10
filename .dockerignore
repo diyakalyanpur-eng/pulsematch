@@ -1,0 +1,6 @@
+node_modules
+.env
+cert.pem
+key.pem
+*.ndjson
+railway.json

@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PulseMatch — Measure Your Chemistry</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+  <style>
+    /* ── Design tokens ─────────────────────────────────────── */
+    :root {
+      --bg:       #090612;
+      --bg2:      #130c22;
+      --card:     rgba(255,255,255,0.065);
+      --border:   rgba(232,52,104,0.22);
+      --accent:   #e83468;
+      --accent2:  #ff9eb5;
+      --gold:     #f4b460;
+      --text:     #fdf0f0;
+      --text2:    rgba(253,240,240,0.60);
+      --ring:     #e83468;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bot: env(safe-area-inset-bottom, 0px);
+    }
+
+    /* ── Reset ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Screen system ─────────────────────────────────────── */
+    .screen {
+      position: fixed; inset: 0;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: calc(20px + var(--safe-top)) 24px calc(20px + var(--safe-bot));
+      overflow-y: auto;
+      z-index: 10;
+    }
+    .screen.active { display: flex; }
+
+    /* ── Particle canvas (home background) ─────────────────── */
+    #particle-canvas {
+      position: fixed; inset: 0; z-index: 1;
+      pointer-events: none;
+    }
+
+    /* ── Camera video ──────────────────────────────────────── */
+    #video {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);   /* mirror like a selfie */
+      z-index: 0;
+      display: none;
+    }
+    #video.active { display: block; }
+
+    /* Dim the video during scan screens */
+    .scan-dim {
+      position: fixed; inset: 0;
+      background: rgba(9,6,18,0.42);
+      z-index: 2; pointer-events: none;
+    }
+
+    /* ── Buttons ───────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 10px;
+      padding: 16px 36px;
+      border-radius: 50px;
+      border: none; cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      font-size: 1rem; font-weight: 600;
+      letter-spacing: 0.02em;
+      transition: transform 0.18s, box-shadow 0.18s, opacity 0.18s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { transform: scale(0.96); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #e83468 0%, #c0214f 100%);
+      color: #fff;
+      box-shadow: 0 8px 32px rgba(232,52,104,0.38);
+    }
+    .btn-primary:hover { box-shadow: 0 12px 40px rgba(232,52,104,0.52); }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--accent2);
+      border: 1.5px solid rgba(255,158,181,0.35);
+    }
+    .btn-outline:hover { border-color: var(--accent2); }
+
+    .btn-pay {
+      background: linear-gradient(135deg, #f4b460 0%, #e8823a 100%);
+      color: #1a0a00;
+      box-shadow: 0 8px 32px rgba(244,180,96,0.40);
+      animation: payPulse 2.2s ease-in-out infinite;
+    }
+    @keyframes payPulse {
+      0%,100% { box-shadow: 0 8px 32px rgba(244,180,96,0.40); }
+      50%      { box-shadow: 0 8px 48px rgba(244,180,96,0.65); }
+    }
+
+    /* ── Typography helpers ────────────────────────────────── */
+    .serif { font-family: 'Playfair Display', serif; }
+    .muted { color: var(--text2); font-size: 0.85rem; }
+    .tag {
+      display: inline-block;
+      padding: 4px 14px; border-radius: 20px;
+      background: rgba(232,52,104,0.15);
+      border: 1px solid rgba(232,52,104,0.25);
+      color: var(--accent2);
+      font-size: 0.75rem; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase;
+    }
+
+    /* ── Cards ─────────────────────────────────────────────── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 28px 24px;
+      width: 100%; max-width: 420px;
+    }
+
+    /* ── Animations ────────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes heartbeat {
+      0%,100% { transform: scale(1); }
+      14%     { transform: scale(1.28); }
+      28%     { transform: scale(1); }
+      42%     { transform: scale(1.12); }
+      70%     { transform: scale(1); }
+    }
+    @keyframes float {
+      0%,100% { transform: translateY(0); }
+      50%     { transform: translateY(-10px); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: scale(0.88); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    .anim-fade-up { animation: fadeUp 0.55s ease forwards; }
+
+    /* ── ═══════════════════════════════════════════════════════
+         HOME SCREEN
+    ══════════════════════════════════════════════════════════ */
+    #screen-home { z-index: 10; gap: 0; justify-content: flex-end; padding-bottom: calc(48px + var(--safe-bot)); }
+    #screen-home .hero { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+
+    .home-logo { font-size: 4rem; animation: float 3.8s ease-in-out infinite; }
+    .home-title { font-family: 'Playfair Display', serif; font-size: 2.6rem; text-align: center; background: linear-gradient(135deg, #fff 40%, #ff9eb5); -webkit-background-clip: text; -webkit-text-fill-color: transparent; line-height: 1.1; }
+    .home-sub { color: var(--text2); text-align: center; font-size: 1rem; line-height: 1.6; max-width: 300px; }
+
+    .how-it-works { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 340px; margin: 20px 0; }
+    .how-step { display: flex; align-items: center; gap: 14px; }
+    .step-num { width: 30px; height: 30px; border-radius: 50%; background: rgba(232,52,104,0.15); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--accent2); flex-shrink: 0; }
+    .step-text { font-size: 0.88rem; color: var(--text2); }
+
+    /* ── ═══════════════════════════════════════════════════════
+         SCAN SCREENS
+    ══════════════════════════════════════════════════════════ */
+    .scan-screen { z-index: 12; background: transparent !important; }
+
+    .scan-top {
+      position: fixed; top: calc(16px + var(--safe-top)); left: 0; right: 0;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 0 20px; z-index: 15; pointer-events: none;
+    }
+    .scan-person-badge {
+      background: rgba(9,6,18,0.80); backdrop-filter: blur(12px);
+      border: 1px solid var(--border); border-radius: 14px;
+      padding: 8px 16px;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em;
+      color: var(--accent2); text-transform: uppercase;
+    }
+    .scan-countdown-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      background: rgba(9,6,18,0.80); backdrop-filter: blur(12px);
+      border: 1px solid var(--border); border-radius: 18px;
+      padding: 10px 12px;
+    }
+    .scan-countdown-wrap svg { width: 60px; height: 60px; }
+    .countdown-num { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+
+    /* Face oval guide */
+    .face-oval {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -58%);
+      width: min(200px, 52vw);
+      height: min(260px, 67vw);
+      border: 2.5px solid rgba(232,52,104,0.75);
+      border-radius: 50%;
+      z-index: 13;
+      pointer-events: none;
+      box-shadow: 0 0 0 2000px rgba(9,6,18,0.38);
+    }
+
+    /* Live HR display */
+    .scan-bottom {
+      position: fixed; bottom: calc(32px + var(--safe-bot)); left: 0; right: 0;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      z-index: 15;
+    }
+    .live-hr-card {
+      background: rgba(9,6,18,0.82); backdrop-filter: blur(16px);
+      border: 1px solid var(--border); border-radius: 20px;
+      padding: 14px 28px; text-align: center;
+    }
+    .live-hr-num { font-size: 2.6rem; font-weight: 700; line-height: 1; }
+    .live-hr-unit { font-size: 0.75rem; color: var(--text2); letter-spacing: 0.08em; }
+    .live-hr-heart { display: inline-block; font-size: 1.1rem; animation: heartbeat 1s ease-in-out infinite; }
+    .scan-instruction { font-size: 0.8rem; color: var(--text2); text-align: center; }
+
+    /* Countdown ring */
+    .ring-track { fill: none; stroke: rgba(255,255,255,0.08); stroke-width: 5; }
+    .ring-progress {
+      fill: none; stroke: var(--ring); stroke-width: 5;
+      stroke-linecap: round;
+      transform: rotate(-90deg); transform-origin: center;
+      transition: stroke-dashoffset 1s linear;
+    }
+    .ring-bg { fill: none; }
+
+    /* ── ═══════════════════════════════════════════════════════
+         PASS PHONE SCREEN
+    ══════════════════════════════════════════════════════════ */
+    #screen-pass { z-index: 14; background: linear-gradient(180deg, #0d0920 0%, #1a0a1e 100%); gap: 28px; }
+    .pass-hearts { font-size: 3.6rem; display: flex; gap: 14px; align-items: center; }
+    .pass-heart-divider { font-size: 1.4rem; color: var(--accent); animation: heartbeat 1.2s ease-in-out infinite; }
+
+    /* ── ═══════════════════════════════════════════════════════
+         CALCULATING SCREEN
+    ══════════════════════════════════════════════════════════ */
+    #screen-calc { z-index: 14; background: linear-gradient(180deg, #0d0920 0%, #1a0a1e 100%); gap: 24px; }
+    .calc-hearts { display: flex; align-items: center; gap: 16px; font-size: 2.4rem; }
+    .calc-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: calcDot 1.2s ease-in-out infinite; }
+    .calc-dot:nth-child(2) { animation-delay: 0.2s; }
+    .calc-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes calcDot { 0%,80%,100%{opacity:0.2;transform:scale(0.8)} 40%{opacity:1;transform:scale(1.2)} }
+
+    /* ── ═══════════════════════════════════════════════════════
+         TEASER SCREEN
+    ══════════════════════════════════════════════════════════ */
+    #screen-teaser { z-index: 14; background: linear-gradient(180deg, #0d0920 0%, #1a0a1e 100%); gap: 20px; }
+    .teaser-card { position: relative; overflow: hidden; }
+    .teaser-blur-overlay {
+      position: absolute; inset: 0; z-index: 2;
+      background: rgba(9,6,18,0.55); backdrop-filter: blur(12px);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 8px; border-radius: 24px;
+    }
+    .teaser-lock { font-size: 1.8rem; }
+    .teaser-blur-text { font-size: 0.9rem; font-weight: 600; color: var(--text2); text-align: center; padding: 0 16px; }
+    .blurred-content { filter: blur(14px); user-select: none; pointer-events: none; }
+    .big-score-blurred { font-size: 5rem; font-weight: 700; text-align: center; color: var(--accent); }
+    .teaser-hint { text-align: center; }
+    .teaser-hint-emoji { font-size: 2rem; }
+    .teaser-hint-text { font-size: 1rem; color: var(--text2); margin-top: 4px; }
+
+    /* ── ═══════════════════════════════════════════════════════
+         REVEAL SCREEN
+    ══════════════════════════════════════════════════════════ */
+    #screen-reveal { z-index: 14; background: linear-gradient(180deg, #0d0920 0%, #1a0a1e 100%); gap: 20px; }
+    .reveal-card { animation: slideIn 0.5s ease; }
+
+    .score-circle {
+      width: 140px; height: 140px;
+      border-radius: 50%;
+      background: conic-gradient(var(--accent) 0% var(--score-pct, 0%), rgba(255,255,255,0.06) 0%);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto;
+      position: relative;
+    }
+    .score-circle::before {
+      content: ''; position: absolute;
+      inset: 8px; border-radius: 50%;
+      background: var(--bg2);
+    }
+    .score-inner { position: relative; z-index: 1; text-align: center; }
+    .score-number { font-size: 2.6rem; font-weight: 700; line-height: 1; }
+    .score-label-small { font-size: 0.7rem; color: var(--text2); letter-spacing: 0.06em; }
+
+    .reveal-tier { text-align: center; margin-top: 12px; }
+    .reveal-emoji { font-size: 2.4rem; }
+    .reveal-label { font-family: 'Playfair Display', serif; font-size: 1.6rem; margin-top: 4px; }
+    .reveal-tagline { color: var(--text2); font-size: 0.9rem; margin-top: 6px; line-height: 1.5; }
+
+    .metrics { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+    .metric { }
+    .metric-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .metric-name { font-size: 0.8rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; }
+    .metric-val { font-size: 0.85rem; font-weight: 700; color: var(--accent2); }
+    .metric-bar-bg { height: 6px; background: rgba(255,255,255,0.07); border-radius: 99px; overflow: hidden; }
+    .metric-bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0%; transition: width 1s ease; }
+
+    .reveal-detail { font-size: 0.83rem; color: var(--text2); line-height: 1.65; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; }
+
+    .hr-compare { display: flex; justify-content: space-around; padding: 12px 0; }
+    .hr-person { text-align: center; }
+    .hr-person-label { font-size: 0.72rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; }
+    .hr-person-val { font-size: 1.6rem; font-weight: 700; margin-top: 2px; }
+    .hr-separator { color: var(--text2); display: flex; align-items: center; font-size: 1.2rem; }
+
+    .reveal-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 340px; }
+
+    /* ── Intake form (teaser screen) ───────────────────────── */
+    .intake-form {
+      width: 100%; max-width: 380px;
+      display: flex; flex-direction: column; gap: 20px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 24px 20px;
+    }
+    .intake-section { display: flex; flex-direction: column; gap: 8px; }
+    .intake-label {
+      font-size: 0.7rem; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text2);
+    }
+    .intake-names { display: flex; gap: 10px; }
+    .intake-input {
+      flex: 1;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,240,240,0.12);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.92rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .intake-input::placeholder { color: rgba(253,240,240,0.3); }
+    .intake-input:focus { border-color: rgba(232,52,104,0.5); }
+    .chip-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .chip {
+      padding: 9px 16px; border-radius: 99px;
+      border: 1px solid rgba(255,240,240,0.15);
+      background: rgba(255,255,255,0.05);
+      color: var(--text2);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.82rem; font-weight: 500;
+      cursor: pointer; transition: all 0.18s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .chip:hover { border-color: rgba(232,52,104,0.35); color: var(--text); }
+    .chip.active {
+      background: rgba(232,52,104,0.18);
+      border-color: var(--accent);
+      color: var(--accent2);
+      font-weight: 600;
+    }
+    .intake-divider {
+      width: 100%; border: none;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      margin: 0;
+    }
+    .intake-sub {
+      font-size: 0.78rem; color: var(--text2); line-height: 1.5;
+      text-align: center; padding: 0 4px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Particle background -->
+<canvas id="particle-canvas"></canvas>
+
+<!-- Camera video (shared between both scan screens) -->
+<video id="video" autoplay playsinline muted></video>
+
+<!-- ══════════════════════════════════════════════════════════
+     SCREEN 1: HOME
+══════════════════════════════════════════════════════════ -->
+<div id="screen-home" class="screen active">
+  <div class="hero">
+    <div class="home-logo">💗</div>
+    <h1 class="home-title">Pulse<br>Match</h1>
+    <p class="home-sub">What does your body know that your heart won't say?</p>
+
+    <div class="how-it-works">
+      <div class="how-step"><div class="step-num">1</div><div class="step-text">Each person holds the camera to their face for 30 seconds</div></div>
+      <div class="how-step"><div class="step-num">2</div><div class="step-text">We measure your heart rate & HRV — no wearable needed</div></div>
+      <div class="how-step"><div class="step-num">3</div><div class="step-text">See your chemistry score — your body doesn't lie</div></div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:320px;align-items:center;">
+    <button class="btn btn-primary" id="btn-start" style="width:100%;font-size:1.05rem;padding:18px;">
+      💗 Measure Our Chemistry
+    </button>
+    <p class="muted" style="text-align:center;">Requires camera access · Works on all phones · 60 seconds total</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SCREEN 2: SCAN — PERSON 1
+══════════════════════════════════════════════════════════ -->
+<div id="screen-scan1" class="screen scan-screen">
+  <div class="scan-dim"></div>
+  <div class="face-oval"></div>
+
+  <div class="scan-top">
+    <div class="scan-person-badge">👤 Person 1</div>
+    <div class="scan-countdown-wrap">
+      <svg id="ring1" viewBox="0 0 60 60">
+        <circle class="ring-track" cx="30" cy="30" r="24"/>
+        <circle id="ring1-progress" class="ring-progress" cx="30" cy="30" r="24"
+          stroke-dasharray="150.8" stroke-dashoffset="0"/>
+      </svg>
+      <span id="countdown1-num" class="countdown-num">30</span>
+    </div>
+  </div>
+
+  <div class="scan-bottom">
+    <div class="live-hr-card">
+      <div>
+        <span class="live-hr-heart">♥</span>
+        <span id="hr1-display" class="live-hr-num"> —</span>
+        <span class="live-hr-unit"> BPM</span>
+      </div>
+    </div>
+    <div class="scan-instruction">Stay still · Look at the camera · Good lighting</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SCREEN 3: PASS THE PHONE
+══════════════════════════════════════════════════════════ -->
+<div id="screen-pass" class="screen">
+  <div class="pass-hearts">
+    <span>👤</span>
+    <span class="pass-heart-divider">♥</span>
+    <span>👤</span>
+  </div>
+  <h2 class="serif" style="font-size:1.8rem;text-align:center;">Pass to your partner</h2>
+  <p style="color:var(--text2);text-align:center;font-size:0.95rem;line-height:1.6;max-width:280px;">
+    First reading captured. Now hand the phone to the other person.
+  </p>
+  <div id="p1-preview" class="card" style="max-width:320px;text-align:center;gap:4px;display:flex;flex-direction:column;align-items:center;">
+    <div class="muted" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;">Person 1 result</div>
+    <div id="p1-hr-shown" style="font-size:2rem;font-weight:700;"></div>
+    <div class="muted">BPM captured ✓</div>
+  </div>
+  <button class="btn btn-primary" id="btn-ready" style="width:100%;max-width:320px;">
+    I'm ready — start my scan →
+  </button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SCREEN 4: SCAN — PERSON 2
+══════════════════════════════════════════════════════════ -->
+<div id="screen-scan2" class="screen scan-screen">
+  <div class="scan-dim"></div>
+  <div class="face-oval"></div>
+
+  <div class="scan-top">
+    <div class="scan-person-badge">👤 Person 2</div>
+    <div class="scan-countdown-wrap">
+      <svg id="ring2" viewBox="0 0 60 60">
+        <circle class="ring-track" cx="30" cy="30" r="24"/>
+        <circle id="ring2-progress" class="ring-progress" cx="30" cy="30" r="24"
+          stroke-dasharray="150.8" stroke-dashoffset="0"/>
+      </svg>
+      <span id="countdown2-num" class="countdown-num">30</span>
+    </div>
+  </div>
+
+  <div class="scan-bottom">
+    <div class="live-hr-card">
+      <div>
+        <span class="live-hr-heart">♥</span>
+        <span id="hr2-display" class="live-hr-num"> —</span>
+        <span class="live-hr-unit"> BPM</span>
+      </div>
+    </div>
+    <div class="scan-instruction">Stay still · Look at the camera · Good lighting</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SCREEN 5: CALCULATING
+══════════════════════════════════════════════════════════ -->
+<div id="screen-calc" class="screen">
+  <div class="calc-hearts">
+    <span style="animation:heartbeat 0.9s ease-in-out infinite;">💗</span>
+    <div style="display:flex;gap:6px;">
+      <div class="calc-dot"></div>
+      <div class="calc-dot"></div>
+      <div class="calc-dot"></div>
+    </div>
+    <span style="animation:heartbeat 0.9s 0.45s ease-in-out infinite;">💗</span>
+  </div>
+  <h2 class="serif" style="font-size:1.7rem;text-align:center;">Analysing your chemistry…</h2>
+  <p style="color:var(--text2);font-size:0.9rem;text-align:center;max-width:260px;line-height:1.6;">
+    Comparing heart rate synchrony, HRV harmony &amp; arousal levels.
+  </p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SCREEN 6: TEASER (blurred, pay to unlock)
+══════════════════════════════════════════════════════════ -->
+<div id="screen-teaser" class="screen">
+  <div style="text-align:center;">
+    <div class="tag">Your chemistry is ready</div>
+    <h2 class="serif" style="font-size:1.9rem;margin-top:12px;">Unlock your result</h2>
+  </div>
+
+  <div class="card teaser-card" style="max-width:360px;">
+    <div class="blurred-content">
+      <div class="big-score-blurred" id="teaser-score-blur">72</div>
+      <div style="text-align:center;font-size:1.3rem;margin-top:4px;">💕 Strong Spark</div>
+      <div style="height:40px;"></div>
+    </div>
+    <div class="teaser-blur-overlay">
+      <div class="teaser-lock">🔒</div>
+      <div class="teaser-blur-text">Your full chemistry analysis is hidden.<br>Unlock it below.</div>
+    </div>
+  </div>
+
+  <div class="teaser-hint">
+    <div id="teaser-emoji" class="teaser-hint-emoji">💕</div>
+    <div id="teaser-text" class="teaser-hint-text">We detected a meaningful signal between you two.</div>
+  </div>
+
+  <!-- Intake form — calibrates interpretation, collected before payment -->
+  <form class="intake-form" id="intake-form" onsubmit="return false;">
+    <div>
+      <h3 class="serif" style="font-size:1.25rem;margin-bottom:4px;">Tell us a little about your duo.</h3>
+      <p class="intake-sub">We use this only to calibrate the model — relationship type and physical proximity modulate expected synchrony per the literature.</p>
+    </div>
+
+    <hr class="intake-divider">
+
+    <div class="intake-section">
+      <div class="intake-label">Your first names (optional)</div>
+      <div class="intake-names">
+        <input class="intake-input" id="name1" type="text" placeholder="Person 1, e.g. Maya" maxlength="20" autocomplete="off">
+        <input class="intake-input" id="name2" type="text" placeholder="Person 2, e.g. Leo" maxlength="20" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="intake-section">
+      <div class="intake-label">Relationship status</div>
+      <div class="chip-group" id="chips-relationship">
+        <button type="button" class="chip active" data-val="established">Established couple</button>
+        <button type="button" class="chip" data-val="dating">Dating</button>
+        <button type="button" class="chip" data-val="justmet">Just met</button>
+      </div>
+    </div>
+
+    <div class="intake-section">
+      <div class="intake-label">Physical proximity during scan</div>
+      <div class="chip-group" id="chips-proximity">
+        <button type="button" class="chip active" data-val="sameroom">Same room</button>
+        <button type="button" class="chip" data-val="remote">Remote / separate</button>
+      </div>
+    </div>
+  </form>
+
+  <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:380px;align-items:center;">
+    <button class="btn btn-pay" id="btn-pay" style="width:100%;font-size:1.05rem;padding:18px;">
+      🔓 Reveal for €1
+    </button>
+    <p class="muted" style="text-align:center;">Secure payment via Stripe · Results shown instantly</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SCREEN 7: REVEAL
+══════════════════════════════════════════════════════════ -->
+<div id="screen-reveal" class="screen">
+  <div class="card reveal-card" style="max-width:420px;display:flex;flex-direction:column;gap:0;">
+
+    <!-- Score circle -->
+    <div id="score-circle-el" class="score-circle" style="--score-pct:0%;">
+      <div class="score-inner">
+        <div id="reveal-score-num" class="score-number">0</div>
+        <div class="score-label-small">/ 99</div>
+      </div>
+    </div>
+
+    <!-- Tier -->
+    <div class="reveal-tier">
+      <div id="reveal-emoji" class="reveal-emoji"></div>
+      <div id="reveal-label" class="reveal-label"></div>
+      <div id="reveal-tagline" class="reveal-tagline"></div>
+    </div>
+
+    <!-- HR comparison -->
+    <div class="hr-compare" style="margin-top:16px;">
+      <div class="hr-person">
+        <div id="p1-name-label" class="hr-person-label">Person 1</div>
+        <div id="p1-hr-final" class="hr-person-val"></div>
+        <div class="muted" style="font-size:0.7rem;">bpm</div>
+      </div>
+      <div class="hr-separator">↔</div>
+      <div class="hr-person">
+        <div id="p2-name-label" class="hr-person-label">Person 2</div>
+        <div id="p2-hr-final" class="hr-person-val"></div>
+        <div class="muted" style="font-size:0.7rem;">bpm</div>
+      </div>
+    </div>
+
+    <!-- Metric bars -->
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-header">
+          <span class="metric-name">♥ Heart Rate Sync</span>
+          <span id="m-hrsync" class="metric-val"></span>
+        </div>
+        <div class="metric-bar-bg"><div id="bar-hrsync" class="metric-bar-fill"></div></div>
+      </div>
+      <div class="metric">
+        <div class="metric-header">
+          <span class="metric-name">〰 HRV Harmony</span>
+          <span id="m-hrv" class="metric-val"></span>
+        </div>
+        <div class="metric-bar-bg"><div id="bar-hrv" class="metric-bar-fill"></div></div>
+      </div>
+      <div class="metric">
+        <div class="metric-header">
+          <span class="metric-name">⚡ Spark Intensity</span>
+          <span id="m-arousal" class="metric-val"></span>
+        </div>
+        <div class="metric-bar-bg"><div id="bar-arousal" class="metric-bar-fill"></div></div>
+      </div>
+    </div>
+
+    <!-- Science detail -->
+    <div id="reveal-detail" class="reveal-detail"></div>
+  </div>
+
+  <!-- Actions -->
+  <div class="reveal-actions">
+    <button class="btn btn-outline" id="btn-share">📤 Share Result</button>
+    <button class="btn btn-outline" id="btn-again" style="font-size:0.9rem;padding:13px;">Try Again</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     APP LOGIC
+══════════════════════════════════════════════════════════ -->
+<script type="module">
+import { RPPGLite } from './rppg-lite.js';
+
+// ── State ────────────────────────────────────────────────
+let scanner      = null;
+let videoStream  = null;
+let resultP1     = null;
+let resultP2     = null;
+let sessionId    = null;
+let previewData  = null;
+let countdownInt = null;
+let intakeData   = { name1: '', name2: '', relationship: 'established', proximity: 'sameroom' };
+
+const SCAN_DURATION = 30;   // seconds
+const CIRCUMFERENCE = 150.8; // 2π × r=24
+
+// ── DOM refs ─────────────────────────────────────────────
+const video      = document.getElementById('video');
+const btnStart   = document.getElementById('btn-start');
+const btnReady   = document.getElementById('btn-ready');
+
+// ── Chip selector logic ───────────────────────────────────
+function initChips(groupId, stateKey) {
+  document.getElementById(groupId).addEventListener('click', e => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    document.querySelectorAll(`#${groupId} .chip`).forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    intakeData[stateKey] = chip.dataset.val;
+  });
+}
+initChips('chips-relationship', 'relationship');
+initChips('chips-proximity',    'proximity');
+const btnPay     = document.getElementById('btn-pay');
+const btnShare   = document.getElementById('btn-share');
+const btnAgain   = document.getElementById('btn-again');
+
+// ── Screen switcher ──────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+
+  // Show video only during scan screens
+  const scanScreens = ['screen-scan1', 'screen-scan2'];
+  video.classList.toggle('active', scanScreens.includes(id));
+}
+
+// ── Particle canvas (home background) ────────────────────
+(function initParticles() {
+  const canvas = document.getElementById('particle-canvas');
+  const ctx    = canvas.getContext('2d');
+  const hearts = [];
+
+  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  window.addEventListener('resize', resize);
+  resize();
+
+  for (let i = 0; i < 30; i++) {
+    hearts.push({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      size: 10 + Math.random() * 18,
+      speedY: 0.3 + Math.random() * 0.7,
+      speedX: (Math.random() - 0.5) * 0.4,
+      opacity: 0.06 + Math.random() * 0.14,
+      phase: Math.random() * Math.PI * 2,
+    });
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hearts.forEach(h => {
+      h.y -= h.speedY;
+      h.x += h.speedX;
+      h.phase += 0.015;
+      if (h.y < -30) { h.y = canvas.height + 20; h.x = Math.random() * canvas.width; }
+      ctx.globalAlpha = h.opacity + Math.sin(h.phase) * 0.04;
+      ctx.font        = `${h.size}px serif`;
+      ctx.fillText('♥', h.x, h.y);
+    });
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── Camera ───────────────────────────────────────────────
+async function startCamera() {
+  if (videoStream) return;
+  videoStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+    audio: false,
+  });
+  video.srcObject = videoStream;
+  await new Promise(res => { video.onloadedmetadata = res; });
+  video.play();
+}
+
+// ── Countdown ring helper ─────────────────────────────────
+function setRing(ringId, secondsLeft) {
+  const pct    = secondsLeft / SCAN_DURATION;
+  const offset = CIRCUMFERENCE * (1 - pct);
+  document.getElementById(ringId).style.strokeDashoffset = offset;
+}
+
+// ── Scan a person ─────────────────────────────────────────
+async function runScan(person) {
+  showScreen(`screen-scan${person}`);
+  const hrEl    = document.getElementById(`hr${person}-display`);
+  const cdNum   = document.getElementById(`countdown${person}-num`);
+  const ringId  = `ring${person}-progress`;
+
+  // Reset ring
+  setRing(ringId, SCAN_DURATION);
+  cdNum.textContent = SCAN_DURATION;
+  hrEl.textContent  = ' —';
+
+  await startCamera();
+
+  scanner = new RPPGLite(video);
+  let secsLeft = SCAN_DURATION;
+
+  scanner.onUpdate = (hr, hrv, quality, _secsLeft) => {
+    hrEl.textContent = ' ' + hr;
+  };
+
+  scanner.start();
+
+  await new Promise(resolve => {
+    countdownInt = setInterval(() => {
+      secsLeft--;
+      cdNum.textContent = secsLeft;
+      setRing(ringId, secsLeft);
+      if (secsLeft <= 0) {
+        clearInterval(countdownInt);
+        resolve();
+      }
+    }, 1000);
+  });
+
+  scanner.stop();
+  return { hr: scanner.hr, hrv: scanner.hrv, quality: scanner.quality };
+}
+
+// ── Buttons ───────────────────────────────────────────────
+btnStart.addEventListener('click', async () => {
+  btnStart.disabled = true;
+  btnStart.textContent = 'Starting camera…';
+  try {
+    // Scan Person 1
+    resultP1 = await runScan(1);
+
+    // Pass screen
+    document.getElementById('p1-hr-shown').textContent = resultP1.hr + ' BPM';
+    showScreen('screen-pass');
+  } catch (e) {
+    alert('Camera access denied. Please allow camera and try again.');
+    btnStart.disabled = false;
+    btnStart.textContent = '💗 Measure Our Chemistry';
+    showScreen('screen-home');
+  }
+});
+
+btnReady.addEventListener('click', async () => {
+  // Scan Person 2
+  resultP2 = await runScan(2);
+
+  // Calculating screen
+  showScreen('screen-calc');
+
+  // POST both results to server
+  try {
+    const resp = await fetch('/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p1: resultP1, p2: resultP2 }),
+    });
+    const data = await resp.json();
+    sessionId   = data.sessionId;
+    previewData = data.preview;
+  } catch (e) {
+    console.error('Session save failed:', e);
+    // Still proceed — teaser will show generic message
+    previewData = { hint: 'medium', emoji: '✨' };
+  }
+
+  // Short dramatic pause
+  await new Promise(r => setTimeout(r, 2800));
+
+  // Show teaser
+  showTeaser();
+});
+
+function showTeaser() {
+  // Fill teaser with hint data (not the real score)
+  const hintMap = {
+    high:   { text: 'We detected a strong physiological signal between you two.', emoji: '🔥' },
+    medium: { text: 'We detected a meaningful connection in your rhythms.',       emoji: '💕' },
+    low:    { text: 'Your bodies have spoken. The truth is waiting below.',        emoji: '✨' },
+  };
+  const hint = hintMap[previewData?.hint] || hintMap.medium;
+  document.getElementById('teaser-emoji').textContent   = previewData?.emoji || hint.emoji;
+  document.getElementById('teaser-text').textContent    = hint.text;
+  document.getElementById('teaser-score-blur').textContent = '??';
+  showScreen('screen-teaser');
+}
+
+btnPay.addEventListener('click', async () => {
+  btnPay.disabled = true;
+  btnPay.textContent = 'Opening payment…';
+
+  // Capture names from inputs just before payment
+  intakeData.name1 = document.getElementById('name1').value.trim();
+  intakeData.name2 = document.getElementById('name2').value.trim();
+
+  try {
+    const resp = await fetch('/api/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, intake: intakeData }),
+    });
+    const data = await resp.json();
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      throw new Error(data.error || 'No checkout URL');
+    }
+  } catch (e) {
+    alert('Payment error: ' + e.message);
+    btnPay.disabled = false;
+    btnPay.textContent = '🔓 Reveal for €1';
+  }
+});
+
+btnShare.addEventListener('click', async () => {
+  const score = document.getElementById('reveal-score-num').textContent;
+  const label = document.getElementById('reveal-label').textContent;
+  const text  = `We just measured our chemistry with PulseMatch and scored ${score}/99 — ${label}! 💗`;
+  if (navigator.share) {
+    await navigator.share({ title: 'PulseMatch', text });
+  } else {
+    await navigator.clipboard.writeText(text).catch(() => {});
+    alert('Result copied to clipboard!');
+  }
+});
+
+btnAgain.addEventListener('click', () => {
+  resultP1 = resultP2 = sessionId = previewData = null;
+  scanner = null;
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-start').textContent = '💗 Measure Our Chemistry';
+  showScreen('screen-home');
+});
+
+// ── Reveal animation ─────────────────────────────────────
+function animateScore(targetScore) {
+  const el  = document.getElementById('reveal-score-num');
+  const cEl = document.getElementById('score-circle-el');
+  let   cur = 0;
+  const step = () => {
+    cur = Math.min(cur + Math.ceil((targetScore - cur) / 8 + 0.5), targetScore);
+    el.textContent = cur;
+    cEl.style.setProperty('--score-pct', (cur / 99 * 100).toFixed(1) + '%');
+    if (cur < targetScore) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function animateBars(chemistry) {
+  setTimeout(() => { document.getElementById('bar-hrsync').style.width  = chemistry.hrSync     + '%'; }, 300);
+  setTimeout(() => { document.getElementById('bar-hrv').style.width     = chemistry.hrvHarmony + '%'; }, 500);
+  setTimeout(() => { document.getElementById('bar-arousal').style.width = chemistry.arousal    + '%'; }, 700);
+}
+
+function showReveal(chemistry) {
+  // Apply names if provided, fall back to generic labels
+  const n1 = chemistry.intake?.name1 || intakeData.name1 || 'Person 1';
+  const n2 = chemistry.intake?.name2 || intakeData.name2 || 'Person 2';
+  document.getElementById('p1-name-label').textContent = n1;
+  document.getElementById('p2-name-label').textContent = n2;
+
+  // Populate
+  document.getElementById('reveal-emoji').textContent   = chemistry.emoji;
+  document.getElementById('reveal-label').textContent   = chemistry.label;
+  document.getElementById('reveal-tagline').textContent = chemistry.tagline;
+  document.getElementById('reveal-detail').textContent  = chemistry.context || chemistry.detail;
+  document.getElementById('p1-hr-final').textContent    = chemistry.p1.hr;
+  document.getElementById('p2-hr-final').textContent    = chemistry.p2.hr;
+  document.getElementById('m-hrsync').textContent       = chemistry.hrSync     + '%';
+  document.getElementById('m-hrv').textContent          = chemistry.hrvHarmony + '%';
+  document.getElementById('m-arousal').textContent      = chemistry.arousal    + '%';
+
+  showScreen('screen-reveal');
+  setTimeout(() => animateScore(chemistry.score), 200);
+  animateBars(chemistry);
+}
+
+// ── Handle return from Stripe ─────────────────────────────
+async function handleReturnFromStripe(urlSession, stripeSession) {
+  showScreen('screen-calc');
+  document.querySelector('#screen-calc h2').textContent = 'Verifying payment…';
+
+  try {
+    const params = new URLSearchParams({ stripe_session_id: stripeSession || '' });
+    const resp   = await fetch(`/api/results/${urlSession}?${params}`);
+    const data   = await resp.json();
+
+    if (data.ok && data.chemistry) {
+      await new Promise(r => setTimeout(r, 1200));
+      showReveal(data.chemistry);
+    } else {
+      alert('Could not verify payment. Contact support.');
+      showScreen('screen-home');
+    }
+  } catch (e) {
+    alert('Error loading results: ' + e.message);
+    showScreen('screen-home');
+  }
+}
+
+// ── Init: check URL params ────────────────────────────────
+(function init() {
+  const params  = new URLSearchParams(window.location.search);
+  const urlSess = params.get('session');
+  const paid    = params.get('paid');
+  const cancelled = params.get('cancelled');
+
+  // Clean URL (no reload)
+  if (urlSess) window.history.replaceState({}, '', '/');
+
+  if (cancelled) {
+    // Stripe cancelled — go back to teaser (session still exists server-side)
+    sessionId = urlSess;
+    previewData = { hint: 'medium', emoji: '💕' };
+    showTeaser();
+    return;
+  }
+
+  if (urlSess && paid) {
+    // Returned from Stripe with payment
+    handleReturnFromStripe(urlSess, paid === 'dev' ? null : paid);
+    return;
+  }
+
+  // Normal start
+  showScreen('screen-home');
+})();
+</script>
+</body>
+</html>
