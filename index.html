@@ -6,6 +6,7 @@
   <title>PulseMatch — Measure Your Chemistry</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     /* ── Design tokens ─────────────────────────────────────── */
     :root {
@@ -319,6 +320,49 @@
 
     .reveal-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 340px; }
 
+    /* ── Share link section (pass screen) ──────────────────── */
+    .share-divider { display:flex;align-items:center;gap:12px;width:100%;max-width:320px;color:var(--text2);font-size:0.8rem; }
+    .share-divider::before,.share-divider::after { content:'';flex:1;height:1px;background:rgba(255,255,255,0.08); }
+    .share-link-box {
+      width:100%;max-width:320px;
+      background:var(--card);border:1px solid var(--border);border-radius:18px;
+      padding:18px;display:flex;flex-direction:column;align-items:center;gap:14px;
+    }
+    .share-link-box p { font-size:0.82rem;color:var(--text2);text-align:center;line-height:1.5; }
+    #qr-container canvas, #qr-container img {
+      border-radius:10px;
+      border:3px solid rgba(232,52,104,0.25);
+    }
+    .copy-url-row { display:flex;gap:8px;width:100%; }
+    .copy-url-input {
+      flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,240,240,0.12);
+      border-radius:10px;padding:9px 12px;color:var(--text2);font-size:0.75rem;
+      font-family:'Inter',sans-serif;outline:none;min-width:0;
+    }
+    .copy-url-btn {
+      padding:9px 14px;border-radius:10px;border:1px solid var(--border);
+      background:rgba(232,52,104,0.12);color:var(--accent2);
+      font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;
+      transition:background 0.18s;
+    }
+    .copy-url-btn:hover { background:rgba(232,52,104,0.22); }
+
+    /* ── Waiting screen ─────────────────────────────────────── */
+    #screen-waiting { background:linear-gradient(180deg,#0d0920 0%,#1a0a1e 100%);gap:22px; }
+    .waiting-pulse {
+      width:80px;height:80px;border-radius:50%;
+      background:rgba(232,52,104,0.1);border:2px solid rgba(232,52,104,0.3);
+      display:flex;align-items:center;justify-content:center;font-size:2rem;
+      animation:waitPulse 1.8s ease-in-out infinite;
+    }
+    @keyframes waitPulse {
+      0%,100%{box-shadow:0 0 0 0 rgba(232,52,104,0.3);}
+      50%{box-shadow:0 0 0 18px rgba(232,52,104,0);}
+    }
+
+    /* ── Partner done screen (P2 remote) ────────────────────── */
+    #screen-partner-done { background:linear-gradient(180deg,#0d0920 0%,#1a0a1e 100%);gap:20px; }
+
     /* ── Intake form (teaser screen) ───────────────────────── */
     .intake-form {
       width: 100%; max-width: 380px;
@@ -442,7 +486,7 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     SCREEN 3: PASS THE PHONE
+     SCREEN 3: PASS THE PHONE / SHARE LINK
 ══════════════════════════════════════════════════════════ -->
 <div id="screen-pass" class="screen">
   <div class="pass-hearts">
@@ -450,18 +494,66 @@
     <span class="pass-heart-divider">♥</span>
     <span>👤</span>
   </div>
-  <h2 class="serif" style="font-size:1.8rem;text-align:center;">Pass to your partner</h2>
-  <p style="color:var(--text2);text-align:center;font-size:0.95rem;line-height:1.6;max-width:280px;">
-    First reading captured. Now hand the phone to the other person.
-  </p>
+  <h2 class="serif" style="font-size:1.8rem;text-align:center;">Your turn is done ✓</h2>
+
   <div id="p1-preview" class="card" style="max-width:320px;text-align:center;gap:4px;display:flex;flex-direction:column;align-items:center;">
-    <div class="muted" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;">Person 1 result</div>
+    <div class="muted" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;">Your heart rate</div>
     <div id="p1-hr-shown" style="font-size:2rem;font-weight:700;"></div>
     <div class="muted">BPM captured ✓</div>
   </div>
+
+  <!-- Option A: same device -->
   <button class="btn btn-primary" id="btn-ready" style="width:100%;max-width:320px;">
-    I'm ready — start my scan →
+    📱 Pass phone — they scan here
   </button>
+
+  <div class="share-divider">or partner is on another device</div>
+
+  <!-- Option B: share link -->
+  <div class="share-link-box">
+    <p>Share this link with your partner. They open it, scan their face, and results appear here automatically.</p>
+    <div id="qr-container"></div>
+    <div class="copy-url-row">
+      <input class="copy-url-input" id="partner-url-display" readonly>
+      <button class="copy-url-btn" id="btn-copy-url">Copy</button>
+    </div>
+    <button class="btn btn-outline" id="btn-share-link" style="width:100%;font-size:0.9rem;padding:12px;">
+      📤 Share link with partner
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SCREEN: WAITING (P1 waits for remote P2)
+══════════════════════════════════════════════════════════ -->
+<div id="screen-waiting" class="screen">
+  <div class="waiting-pulse">💗</div>
+  <h2 class="serif" style="font-size:1.8rem;text-align:center;">Waiting for your partner…</h2>
+  <p style="color:var(--text2);text-align:center;font-size:0.9rem;line-height:1.6;max-width:280px;">
+    Once they complete their 30-second scan, your chemistry will be calculated automatically.
+  </p>
+  <div class="card" style="max-width:320px;text-align:center;">
+    <div class="muted" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Partner link</div>
+    <div id="waiting-url" style="font-size:0.78rem;color:var(--accent2);word-break:break-all;"></div>
+  </div>
+  <button class="btn btn-outline" id="btn-reshare" style="font-size:0.85rem;padding:12px 24px;">
+    📤 Resend link
+  </button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SCREEN: PARTNER DONE (shown to P2 on their remote device)
+══════════════════════════════════════════════════════════ -->
+<div id="screen-partner-done" class="screen">
+  <div style="font-size:4rem;animation:float 3s ease-in-out infinite;">💗</div>
+  <h2 class="serif" style="font-size:2rem;text-align:center;">All done!</h2>
+  <p style="color:var(--text2);text-align:center;font-size:0.95rem;line-height:1.6;max-width:300px;">
+    Your scan is complete. Your partner will see the chemistry result on their screen momentarily.
+  </p>
+  <div class="card" style="max-width:320px;text-align:center;">
+    <div style="font-size:1.4rem;margin-bottom:6px;">✅</div>
+    <div class="muted">Physiological data submitted successfully</div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
@@ -662,24 +754,29 @@
 import { RPPGLite } from './rppg-lite.js';
 
 // ── State ────────────────────────────────────────────────
-let scanner      = null;
-let videoStream  = null;
-let resultP1     = null;
-let resultP2     = null;
-let sessionId    = null;
-let previewData  = null;
-let countdownInt = null;
-let intakeData   = { name1: '', name2: '', relationship: 'established', proximity: 'sameroom' };
+let scanner       = null;
+let videoStream   = null;
+let resultP1      = null;
+let sessionId     = null;
+let partnerToken  = null;
+let partnerUrl    = null;
+let previewData   = null;
+let countdownInt  = null;
+let pollInterval  = null;
+let intakeData    = { name1: '', name2: '', relationship: 'established', proximity: 'sameroom' };
 
-const SCAN_DURATION = 30;   // seconds
-const CIRCUMFERENCE = 150.8; // 2π × r=24
+const SCAN_DURATION = 30;
+const CIRCUMFERENCE = 150.8;
 
 // ── DOM refs ─────────────────────────────────────────────
-const video      = document.getElementById('video');
-const btnStart   = document.getElementById('btn-start');
-const btnReady   = document.getElementById('btn-ready');
+const video    = document.getElementById('video');
+const btnStart = document.getElementById('btn-start');
+const btnReady = document.getElementById('btn-ready');
+const btnPay   = document.getElementById('btn-pay');
+const btnShare = document.getElementById('btn-share');
+const btnAgain = document.getElementById('btn-again');
 
-// ── Chip selector logic ───────────────────────────────────
+// ── Chip selector ─────────────────────────────────────────
 function initChips(groupId, stateKey) {
   document.getElementById(groupId).addEventListener('click', e => {
     const chip = e.target.closest('.chip');
@@ -691,9 +788,6 @@ function initChips(groupId, stateKey) {
 }
 initChips('chips-relationship', 'relationship');
 initChips('chips-proximity',    'proximity');
-const btnPay     = document.getElementById('btn-pay');
-const btnShare   = document.getElementById('btn-share');
-const btnAgain   = document.getElementById('btn-again');
 
 // ── Screen switcher ──────────────────────────────────────
 function showScreen(id) {
@@ -803,53 +897,126 @@ async function runScan(person) {
 }
 
 // ── Buttons ───────────────────────────────────────────────
+
+// P1 starts — scan then show pass/share screen
 btnStart.addEventListener('click', async () => {
   btnStart.disabled = true;
   btnStart.textContent = 'Starting camera…';
   try {
-    // Scan Person 1
     resultP1 = await runScan(1);
 
-    // Pass screen
-    document.getElementById('p1-hr-shown').textContent = resultP1.hr + ' BPM';
+    // Init session on server (P1 only) → get partner token
+    const resp = await fetch('/api/session/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p1: resultP1 }),
+    });
+    const data = await resp.json();
+    sessionId    = data.sessionId;
+    partnerToken = data.partnerToken;
+
+    // Build partner URL
+    const base   = window.location.origin;
+    partnerUrl   = `${base}/?partner=${partnerToken}`;
+
+    // Populate pass screen
+    document.getElementById('p1-hr-shown').textContent      = resultP1.hr + ' BPM';
+    document.getElementById('partner-url-display').value    = partnerUrl;
+    document.getElementById('waiting-url').textContent      = partnerUrl;
+
+    // Generate QR code
+    document.getElementById('qr-container').innerHTML = '';
+    new QRCode(document.getElementById('qr-container'), {
+      text: partnerUrl, width: 160, height: 160,
+      colorDark: '#e83468', colorLight: '#130c22',
+    });
+
     showScreen('screen-pass');
   } catch (e) {
-    alert('Camera access denied. Please allow camera and try again.');
+    alert('Camera or network error: ' + e.message);
     btnStart.disabled = false;
     btnStart.textContent = '💗 Measure Our Chemistry';
     showScreen('screen-home');
   }
 });
 
+// P2 same device — scan then submit via partner token
 btnReady.addEventListener('click', async () => {
-  // Scan Person 2
-  resultP2 = await runScan(2);
+  const resultP2 = await runScan(2);
+  await submitP2AndWait(resultP2);
+});
 
-  // Calculating screen
+// Copy partner URL
+document.getElementById('btn-copy-url').addEventListener('click', () => {
+  navigator.clipboard.writeText(partnerUrl).then(() => {
+    const btn = document.getElementById('btn-copy-url');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 2000);
+  });
+});
+
+// Share partner link (native share sheet)
+document.getElementById('btn-share-link').addEventListener('click', async () => {
+  if (navigator.share) {
+    await navigator.share({ title: 'PulseMatch', text: 'Scan your face to measure our chemistry 💗', url: partnerUrl });
+  } else {
+    navigator.clipboard.writeText(partnerUrl);
+    alert('Link copied — send it to your partner!');
+  }
+  // Switch to waiting screen
+  showScreen('screen-waiting');
+  startPolling();
+});
+
+// Resend from waiting screen
+document.getElementById('btn-reshare').addEventListener('click', async () => {
+  if (navigator.share) {
+    await navigator.share({ title: 'PulseMatch', url: partnerUrl });
+  } else {
+    navigator.clipboard.writeText(partnerUrl);
+    alert('Link copied!');
+  }
+});
+
+// ── Submit P2 result + proceed to teaser ──────────────────
+async function submitP2AndWait(resultP2) {
   showScreen('screen-calc');
-
-  // POST both results to server
   try {
-    const resp = await fetch('/api/session', {
+    await fetch(`/api/partner/${partnerToken}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p1: resultP1, p2: resultP2 }),
+      body: JSON.stringify({ p2: resultP2 }),
     });
-    const data = await resp.json();
-    sessionId   = data.sessionId;
-    previewData = data.preview;
-  } catch (e) {
-    console.error('Session save failed:', e);
-    // Still proceed — teaser will show generic message
-    previewData = { hint: 'medium', emoji: '✨' };
-  }
+  } catch (e) { console.error('Partner submit failed:', e); }
 
-  // Short dramatic pause
+  // Get preview from status
+  try {
+    const r = await fetch(`/api/session/${sessionId}/status`);
+    const d = await r.json();
+    if (d.ready) previewData = d.preview;
+  } catch (_) {}
+
   await new Promise(r => setTimeout(r, 2800));
-
-  // Show teaser
   showTeaser();
-});
+}
+
+// ── Poll until partner scans (remote flow) ────────────────
+function startPolling() {
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(async () => {
+    try {
+      const r = await fetch(`/api/session/${sessionId}/status`);
+      const d = await r.json();
+      if (d.ready) {
+        clearInterval(pollInterval);
+        previewData = d.preview;
+        showScreen('screen-calc');
+        await new Promise(r => setTimeout(r, 2200));
+        showTeaser();
+      }
+    } catch (_) {}
+  }, 2500);
+}
 
 function showTeaser() {
   // Fill teaser with hint data (not the real score)
@@ -979,17 +1146,34 @@ async function handleReturnFromStripe(urlSession, stripeSession) {
 }
 
 // ── Init: check URL params ────────────────────────────────
-(function init() {
-  const params  = new URLSearchParams(window.location.search);
-  const urlSess = params.get('session');
-  const paid    = params.get('paid');
+(async function init() {
+  const params    = new URLSearchParams(window.location.search);
+  const urlSess   = params.get('session');
+  const paid      = params.get('paid');
   const cancelled = params.get('cancelled');
+  const pToken    = params.get('partner');  // P2 remote flow
 
-  // Clean URL (no reload)
-  if (urlSess) window.history.replaceState({}, '', '/');
+  window.history.replaceState({}, '', '/');
+
+  // ── P2 remote flow: partner opens the link ──────────────
+  if (pToken) {
+    partnerToken = pToken;
+    // Show P2 scan screen directly
+    try {
+      await startCamera();
+      const resultP2 = await runScan(2);
+      // Submit to server via partner token
+      await fetch(`/api/partner/${pToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p2: resultP2 }),
+      });
+    } catch (e) { console.error('P2 remote scan error:', e); }
+    showScreen('screen-partner-done');
+    return;
+  }
 
   if (cancelled) {
-    // Stripe cancelled — go back to teaser (session still exists server-side)
     sessionId = urlSess;
     previewData = { hint: 'medium', emoji: '💕' };
     showTeaser();
