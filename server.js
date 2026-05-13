@@ -142,7 +142,7 @@ app.post('/api/partner/:token', (req, res) => {
   session.chemistry = computeChemistry(session.p1, p2);
 
   console.log(`✅  Session ${sessionId.slice(0,8)} — P2 HR=${p2.hr} score=${session.chemistry.score} "${session.chemistry.label}"`);
-  res.json({ ok: true });
+  res.json({ ok: true, sessionId });
 });
 
 // ── GET /api/session/:id/status ───────────────────────────────────────

@@ -228,6 +228,20 @@
     .live-hr-heart { display: inline-block; font-size: 1.1rem; animation: heartbeat 1s ease-in-out infinite; }
     .scan-instruction { font-size: 0.8rem; color: var(--text2); text-align: center; }
 
+    /* ── Scan tips card ──────────────────────────────────── */
+    .scan-tips-card {
+      background: rgba(9,6,18,0.82); backdrop-filter: blur(16px);
+      border: 1px solid var(--border); border-radius: 18px;
+      padding: 12px 20px;
+      display: flex; flex-direction: column; gap: 7px;
+      width: calc(100% - 40px); max-width: 320px;
+    }
+    .scan-tips-row {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 0.82rem; color: var(--text2); line-height: 1.2;
+    }
+    .scan-tips-icon { font-size: 1rem; flex-shrink: 0; width: 20px; text-align: center; }
+
     /* Countdown ring */
     .ring-track { fill: none; stroke: rgba(255,255,255,0.08); stroke-width: 5; }
     .ring-progress {
@@ -474,6 +488,11 @@
   </div>
 
   <div class="scan-bottom">
+    <div class="scan-tips-card">
+      <div class="scan-tips-row"><span class="scan-tips-icon">👁️</span><span>Keep your eyes on the camera</span></div>
+      <div class="scan-tips-row"><span class="scan-tips-icon">🧘</span><span>Stay completely still for 30 s</span></div>
+      <div class="scan-tips-row"><span class="scan-tips-icon">💡</span><span>Make sure you have good lighting</span></div>
+    </div>
     <div class="live-hr-card">
       <div>
         <span class="live-hr-heart">♥</span>
@@ -481,7 +500,6 @@
         <span class="live-hr-unit"> BPM</span>
       </div>
     </div>
-    <div class="scan-instruction">Stay still · Look at the camera · Good lighting</div>
   </div>
 </div>
 
@@ -576,6 +594,11 @@
   </div>
 
   <div class="scan-bottom">
+    <div class="scan-tips-card">
+      <div class="scan-tips-row"><span class="scan-tips-icon">👁️</span><span>Keep your eyes on the camera</span></div>
+      <div class="scan-tips-row"><span class="scan-tips-icon">🧘</span><span>Stay completely still for 30 s</span></div>
+      <div class="scan-tips-row"><span class="scan-tips-icon">💡</span><span>Make sure you have good lighting</span></div>
+    </div>
     <div class="live-hr-card">
       <div>
         <span class="live-hr-heart">♥</span>
@@ -583,7 +606,6 @@
         <span class="live-hr-unit"> BPM</span>
       </div>
     </div>
-    <div class="scan-instruction">Stay still · Look at the camera · Good lighting</div>
   </div>
 </div>
 
@@ -1158,18 +1180,40 @@ async function handleReturnFromStripe(urlSession, stripeSession) {
   // ── P2 remote flow: partner opens the link ──────────────
   if (pToken) {
     partnerToken = pToken;
-    // Show P2 scan screen directly
     try {
       await startCamera();
       const resultP2 = await runScan(2);
-      // Submit to server via partner token
-      await fetch(`/api/partner/${pToken}`, {
+
+      // Submit scan — server now returns sessionId so P2 can proceed
+      const submitResp = await fetch(`/api/partner/${pToken}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ p2: resultP2 }),
       });
-    } catch (e) { console.error('P2 remote scan error:', e); }
-    showScreen('screen-partner-done');
+      const submitData = await submitResp.json();
+
+      if (submitData.ok && submitData.sessionId) {
+        sessionId = submitData.sessionId;
+
+        // Fetch preview for teaser hint
+        try {
+          const r = await fetch(`/api/session/${sessionId}/status`);
+          const d = await r.json();
+          if (d.ready) previewData = d.preview;
+        } catch (_) {}
+
+        // Show calculating animation, then teaser
+        showScreen('screen-calc');
+        await new Promise(r => setTimeout(r, 2800));
+        showTeaser();
+      } else {
+        // Fallback if server doesn't return session data
+        showScreen('screen-partner-done');
+      }
+    } catch (e) {
+      console.error('P2 remote scan error:', e);
+      showScreen('screen-partner-done');
+    }
     return;
   }
 
