@@ -157,7 +157,7 @@ app.get('/api/session/:id/status', (req, res) => {
     emoji: session.chemistry.emoji,
   } : null;
 
-  res.json({ ok: true, ready, preview });
+  res.json({ ok: true, ready, preview, paid: !!session.paid });
 });
 
 // ── POST /api/checkout ────────────────────────────────────────────────

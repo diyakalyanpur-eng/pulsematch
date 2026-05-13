@@ -784,7 +784,8 @@ let partnerToken  = null;
 let partnerUrl    = null;
 let previewData   = null;
 let countdownInt  = null;
-let pollInterval  = null;
+let pollInterval       = null;
+let teaserPollInterval = null;
 let intakeData    = { name1: '', name2: '', relationship: 'established', proximity: 'sameroom' };
 
 const SCAN_DURATION = 30;
@@ -1052,9 +1053,37 @@ function showTeaser() {
   document.getElementById('teaser-text').textContent    = hint.text;
   document.getElementById('teaser-score-blur').textContent = '??';
   showScreen('screen-teaser');
+  startTeaserPolling();
+}
+
+// ── Poll while on teaser: if partner already paid, show reveal for free ──
+function startTeaserPolling() {
+  if (!sessionId) return;
+  if (teaserPollInterval) clearInterval(teaserPollInterval);
+  teaserPollInterval = setInterval(async () => {
+    try {
+      const r = await fetch(`/api/session/${sessionId}/status`);
+      const d = await r.json();
+      if (d.paid) {
+        clearInterval(teaserPollInterval);
+        teaserPollInterval = null;
+        // Session already unlocked — fetch results directly (no Stripe needed)
+        const res2 = await fetch(`/api/results/${sessionId}`);
+        const data = await res2.json();
+        if (data.ok && data.chemistry) {
+          // Capture any names the user may have typed before partner paid
+          intakeData.name1 = document.getElementById('name1').value.trim() || intakeData.name1;
+          intakeData.name2 = document.getElementById('name2').value.trim() || intakeData.name2;
+          showReveal(data.chemistry);
+        }
+      }
+    } catch (_) {}
+  }, 3000);
 }
 
 btnPay.addEventListener('click', async () => {
+  // Stop polling — this device is paying, result will arrive via Stripe redirect
+  if (teaserPollInterval) { clearInterval(teaserPollInterval); teaserPollInterval = null; }
   btnPay.disabled = true;
   btnPay.textContent = 'Opening payment…';
 
@@ -1094,7 +1123,9 @@ btnShare.addEventListener('click', async () => {
 });
 
 btnAgain.addEventListener('click', () => {
-  resultP1 = resultP2 = sessionId = previewData = null;
+  if (teaserPollInterval) { clearInterval(teaserPollInterval); teaserPollInterval = null; }
+  if (pollInterval)       { clearInterval(pollInterval);       pollInterval = null; }
+  resultP1 = null; sessionId = null; previewData = null;
   scanner = null;
   document.getElementById('btn-start').disabled = false;
   document.getElementById('btn-start').textContent = '💗 Measure Our Chemistry';
