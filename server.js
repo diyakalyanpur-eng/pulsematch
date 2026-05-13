@@ -2,30 +2,86 @@
 // PulseMatch — backend
 //
 // POST /api/session/init         { p1 }           → { sessionId, partnerToken }
-// POST /api/partner/:token       { p2 }           → { ok }           (P2 submits scan)
-// GET  /api/session/:id/status                    → { ready, preview } (P1 polls)
+// POST /api/partner/:token       { p2 }           → { ok, sessionId }
+// GET  /api/session/:id/status                    → { ready, preview, paid }
 // POST /api/checkout             { sessionId, intake } → { url }
 // GET  /api/results/:id          ?stripe_session_id=  → { chemistry }
 
-const express = require('express');
-const cors    = require('cors');
-const crypto  = require('crypto');
-const path    = require('path');
-const fs      = require('fs');
-const http    = require('http');
-const https   = require('https');
+const express  = require('express');
+const cors     = require('cors');
+const crypto   = require('crypto');
+const path     = require('path');
+const fs       = require('fs');
+const http     = require('http');
+const https    = require('https');
+const { Firestore, FieldValue } = require('@google-cloud/firestore');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// ── Session store ─────────────────────────────────────────────────────
+// ── Firestore init ────────────────────────────────────────────────────
+let db = null;
+
+function initFirestore() {
+  const svcAcct = process.env.GCP_SERVICE_ACCOUNT;
+  if (svcAcct) {
+    try {
+      const credentials = JSON.parse(svcAcct);
+      db = new Firestore({
+        projectId:   credentials.project_id,
+        credentials: {
+          client_email: credentials.client_email,
+          private_key:  credentials.private_key,
+        },
+      });
+      console.log('🔥  Firestore connected (GCP_SERVICE_ACCOUNT)');
+    } catch (e) {
+      console.warn('⚠️   GCP_SERVICE_ACCOUNT JSON parse failed:', e.message);
+    }
+  } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    // Standard ADC path — Firestore picks it up automatically
+    db = new Firestore({ projectId: process.env.GCP_PROJECT_ID });
+    console.log('🔥  Firestore connected (GOOGLE_APPLICATION_CREDENTIALS)');
+  } else {
+    console.warn('⚠️   No Firestore credentials — data will NOT be persisted.');
+  }
+}
+initFirestore();
+
+// ── Persist helpers ───────────────────────────────────────────────────
+// Write the full session snapshot to Firestore (fire-and-forget)
+function persistSession(sessionId, session) {
+  if (!db) return;
+  const doc = {
+    sessionId,
+    partnerToken:  session.partnerToken,
+    createdAt:     session.createdAt,
+    updatedAt:     Date.now(),
+    p1:            session.p1   || null,
+    p2:            session.p2   || null,
+    chemistry:     session.chemistry || null,
+    intake:        session.intake    || null,
+    paid:          !!session.paid,
+    paidAt:        session.paidAt        || null,
+    stripeSession: session.stripeSession || null,
+  };
+  db.collection('sessions').doc(sessionId).set(doc, { merge: true })
+    .catch(e => console.error('Firestore write error:', e.message));
+
+  // Keep partnerToken → sessionId lookup doc in sync
+  db.collection('partnerTokens').doc(session.partnerToken)
+    .set({ sessionId, createdAt: session.createdAt }, { merge: true })
+    .catch(e => console.error('Firestore partnerToken write error:', e.message));
+}
+
+// ── In-memory session store (fast cache for active sessions) ──────────
 const sessions      = new Map();   // sessionId → session
 const partnerTokens = new Map();   // partnerToken → sessionId
 
 setInterval(() => {
-  const cutoff = Date.now() - 7_200_000;  // 2-hour expiry
+  const cutoff = Date.now() - 7_200_000;   // 2-hour expiry
   for (const [id, s] of sessions) {
     if (s.createdAt < cutoff) {
       partnerTokens.delete(s.partnerToken);
@@ -36,10 +92,10 @@ setInterval(() => {
 
 // ── Chemistry algorithm ───────────────────────────────────────────────
 function computeChemistry(p1, p2) {
-  const hrDelta    = Math.abs(p1.hr - p2.hr);
-  const hrSync     = Math.round(Math.max(0, 100 - hrDelta * 2.5));
+  const hrDelta = Math.abs(p1.hr - p2.hr);
+  const hrSync  = Math.round(Math.max(0, 100 - hrDelta * 2.5));
 
-  const avgHR  = (p1.hr + p2.hr) / 2;
+  const avgHR   = (p1.hr + p2.hr) / 2;
   const arousal = Math.round(Math.min(100, Math.max(0, (avgHR - 62) * 3)));
 
   const coherence = Math.round(((p1.quality || 0.5) + (p2.quality || 0.5)) / 2 * 100);
@@ -76,9 +132,15 @@ function computeChemistry(p1, p2) {
   ];
 
   const tier = tiers.find(t => score >= t.min);
-  return { score, hrSync, arousal, coherence,
-    emoji: tier.emoji, label: tier.label, tagline: tier.tagline, detail: tier.detail,
-    p1: { hr: p1.hr }, p2: { hr: p2.hr } };
+  return {
+    score, hrSync, arousal, coherence,
+    emoji:   tier.emoji,
+    label:   tier.label,
+    tagline: tier.tagline,
+    detail:  tier.detail,
+    p1: { hr: p1.hr },
+    p2: { hr: p2.hr },
+  };
 }
 
 function addIntakeContext(chemistry, intake) {
@@ -104,7 +166,6 @@ function addIntakeContext(chemistry, intake) {
 }
 
 // ── POST /api/session/init ────────────────────────────────────────────
-// P1 submits their scan result → creates session, returns partner link token
 app.post('/api/session/init', (req, res) => {
   const { p1 } = req.body;
   if (!p1?.hr) return res.status(400).json({ ok: false, error: 'Missing P1 scan data' });
@@ -112,43 +173,46 @@ app.post('/api/session/init', (req, res) => {
   const sessionId    = crypto.randomBytes(20).toString('hex');
   const partnerToken = crypto.randomBytes(12).toString('hex');
 
-  sessions.set(sessionId, {
-    p1, p2: null, chemistry: null,
+  const session = {
+    p1, p2: null, chemistry: null, intake: null,
     partnerToken, paid: false, createdAt: Date.now(),
-  });
+    paidAt: null, stripeSession: null,
+  };
+
+  sessions.set(sessionId, session);
   partnerTokens.set(partnerToken, sessionId);
+  persistSession(sessionId, session);
 
   console.log(`🆕  Session ${sessionId.slice(0,8)} — P1 HR=${p1.hr} token=${partnerToken.slice(0,8)}…`);
   res.json({ ok: true, sessionId, partnerToken });
 });
 
 // ── POST /api/partner/:token ──────────────────────────────────────────
-// P2 submits their scan result (same device OR remote link)
 app.post('/api/partner/:token', (req, res) => {
   const sessionId = partnerTokens.get(req.params.token);
   if (!sessionId) return res.status(404).json({ ok: false, error: 'Invalid or expired partner token' });
 
   const session = sessions.get(sessionId);
   if (!session)  return res.status(404).json({ ok: false, error: 'Session not found' });
-  if (session.p2) return res.json({ ok: true, already: true }); // idempotent
+  if (session.p2) return res.json({ ok: true, already: true, sessionId });
 
   const { p2 } = req.body;
   if (!p2?.hr) return res.status(400).json({ ok: false, error: 'Missing P2 scan data' });
 
   session.p2        = p2;
   session.chemistry = computeChemistry(session.p1, p2);
+  persistSession(sessionId, session);
 
   console.log(`✅  Session ${sessionId.slice(0,8)} — P2 HR=${p2.hr} score=${session.chemistry.score} "${session.chemistry.label}"`);
   res.json({ ok: true, sessionId });
 });
 
 // ── GET /api/session/:id/status ───────────────────────────────────────
-// P1 polls this until P2 has scanned
 app.get('/api/session/:id/status', (req, res) => {
   const session = sessions.get(req.params.id);
   if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
 
-  const ready = session.chemistry !== null;
+  const ready   = session.chemistry !== null;
   const preview = ready ? {
     hint:  session.chemistry.score >= 65 ? 'high' : session.chemistry.score >= 45 ? 'medium' : 'low',
     emoji: session.chemistry.emoji,
@@ -161,19 +225,22 @@ app.get('/api/session/:id/status', (req, res) => {
 app.post('/api/checkout', async (req, res) => {
   const { sessionId, intake } = req.body;
   const session = sessions.get(sessionId);
-  if (!session)         return res.status(404).json({ ok: false, error: 'Session not found' });
+  if (!session)           return res.status(404).json({ ok: false, error: 'Session not found' });
   if (!session.chemistry) return res.status(400).json({ ok: false, error: 'Both scans not complete yet' });
 
   if (intake) {
     session.intake    = intake;
     session.chemistry = addIntakeContext(session.chemistry, intake);
+    persistSession(sessionId, session);
   }
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   const origin    = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
 
   if (!stripeKey) {
-    session.paid = true;
+    session.paid  = true;
+    session.paidAt = Date.now();
+    persistSession(sessionId, session);
     return res.json({ ok: true, url: `${origin}/?session=${sessionId}&paid=dev` });
   }
 
@@ -216,7 +283,10 @@ app.get('/api/results/:sessionId', async (req, res) => {
     const stripe = require('stripe')(stripeKey);
     const ss     = await stripe.checkout.sessions.retrieve(stripeSession);
     if (ss.payment_status === 'paid' && ss.client_reference_id === req.params.sessionId) {
-      session.paid = true;
+      session.paid          = true;
+      session.paidAt        = Date.now();
+      session.stripeSession = stripeSession;
+      persistSession(req.params.sessionId, session);
       return res.json({ ok: true, chemistry: session.chemistry });
     }
     res.status(402).json({ ok: false, error: 'Payment not verified' });
@@ -243,3 +313,5 @@ if (fs.existsSync(CERT) && fs.existsSync(KEY)) {
 
 if (!process.env.STRIPE_SECRET_KEY)
   console.log('   ⚠️  Dev mode — payment skipped (set STRIPE_SECRET_KEY to enable)\n');
+if (!db)
+  console.log('   ⚠️  No Firestore — set GCP_SERVICE_ACCOUNT to enable persistence\n');
