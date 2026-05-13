@@ -955,6 +955,7 @@ btnStart.addEventListener('click', async () => {
     });
 
     showScreen('screen-pass');
+    startPolling();   // begin watching for P2 regardless of how the link is shared
   } catch (e) {
     alert('Camera or network error: ' + e.message);
     btnStart.disabled = false;
@@ -1003,6 +1004,8 @@ document.getElementById('btn-reshare').addEventListener('click', async () => {
 
 // ── Submit P2 result + proceed to teaser ──────────────────
 async function submitP2AndWait(resultP2) {
+  // Same-device P2 — stop the background poll started on the pass screen
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
   showScreen('screen-calc');
   try {
     await fetch(`/api/partner/${partnerToken}`, {
