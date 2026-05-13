@@ -455,7 +455,7 @@
 
     <div class="how-it-works">
       <div class="how-step"><div class="step-num">1</div><div class="step-text">Each person holds the camera to their face for 30 seconds</div></div>
-      <div class="how-step"><div class="step-num">2</div><div class="step-text">We measure your heart rate & HRV — no wearable needed</div></div>
+      <div class="how-step"><div class="step-num">2</div><div class="step-text">We measure your heart rate — no wearable needed</div></div>
       <div class="how-step"><div class="step-num">3</div><div class="step-text">See your chemistry score — your body doesn't lie</div></div>
     </div>
   </div>
@@ -624,7 +624,7 @@
   </div>
   <h2 class="serif" style="font-size:1.7rem;text-align:center;">Analysing your chemistry…</h2>
   <p style="color:var(--text2);font-size:0.9rem;text-align:center;max-width:260px;line-height:1.6;">
-    Comparing heart rate synchrony, HRV harmony &amp; arousal levels.
+    Comparing heart rate synchrony &amp; arousal levels.
   </p>
 </div>
 
@@ -741,13 +741,6 @@
           <span id="m-hrsync" class="metric-val"></span>
         </div>
         <div class="metric-bar-bg"><div id="bar-hrsync" class="metric-bar-fill"></div></div>
-      </div>
-      <div class="metric">
-        <div class="metric-header">
-          <span class="metric-name">〰 HRV Harmony</span>
-          <span id="m-hrv" class="metric-val"></span>
-        </div>
-        <div class="metric-bar-bg"><div id="bar-hrv" class="metric-bar-fill"></div></div>
       </div>
       <div class="metric">
         <div class="metric-header">
@@ -1150,9 +1143,8 @@ function animateScore(targetScore) {
 }
 
 function animateBars(chemistry) {
-  setTimeout(() => { document.getElementById('bar-hrsync').style.width  = chemistry.hrSync     + '%'; }, 300);
-  setTimeout(() => { document.getElementById('bar-hrv').style.width     = chemistry.hrvHarmony + '%'; }, 500);
-  setTimeout(() => { document.getElementById('bar-arousal').style.width = chemistry.arousal    + '%'; }, 700);
+  setTimeout(() => { document.getElementById('bar-hrsync').style.width  = chemistry.hrSync  + '%'; }, 300);
+  setTimeout(() => { document.getElementById('bar-arousal').style.width = chemistry.arousal + '%'; }, 500);
 }
 
 function showReveal(chemistry) {
@@ -1169,9 +1161,8 @@ function showReveal(chemistry) {
   document.getElementById('reveal-detail').textContent  = chemistry.context || chemistry.detail;
   document.getElementById('p1-hr-final').textContent    = chemistry.p1.hr;
   document.getElementById('p2-hr-final').textContent    = chemistry.p2.hr;
-  document.getElementById('m-hrsync').textContent       = chemistry.hrSync     + '%';
-  document.getElementById('m-hrv').textContent          = chemistry.hrvHarmony + '%';
-  document.getElementById('m-arousal').textContent      = chemistry.arousal    + '%';
+  document.getElementById('m-hrsync').textContent  = chemistry.hrSync  + '%';
+  document.getElementById('m-arousal').textContent = chemistry.arousal + '%';
 
   showScreen('screen-reveal');
   setTimeout(() => animateScore(chemistry.score), 200);

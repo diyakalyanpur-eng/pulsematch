@@ -39,15 +39,12 @@ function computeChemistry(p1, p2) {
   const hrDelta    = Math.abs(p1.hr - p2.hr);
   const hrSync     = Math.round(Math.max(0, 100 - hrDelta * 2.5));
 
-  const hrvDelta   = Math.abs(p1.hrv - p2.hrv);
-  const hrvHarmony = Math.round(Math.max(0, 100 - hrvDelta * 1.8));
-
   const avgHR  = (p1.hr + p2.hr) / 2;
   const arousal = Math.round(Math.min(100, Math.max(0, (avgHR - 62) * 3)));
 
   const coherence = Math.round(((p1.quality || 0.5) + (p2.quality || 0.5)) / 2 * 100);
 
-  const raw   = hrSync*0.38 + hrvHarmony*0.32 + arousal*0.18 + coherence*0.12;
+  const raw   = hrSync*0.56 + arousal*0.26 + coherence*0.18;
   const score = Math.round(Math.min(99, Math.max(18, raw)));
 
   const tiers = [
@@ -79,9 +76,9 @@ function computeChemistry(p1, p2) {
   ];
 
   const tier = tiers.find(t => score >= t.min);
-  return { score, hrSync, hrvHarmony, arousal, coherence,
+  return { score, hrSync, arousal, coherence,
     emoji: tier.emoji, label: tier.label, tagline: tier.tagline, detail: tier.detail,
-    p1: { hr: p1.hr, hrv: p1.hrv }, p2: { hr: p2.hr, hrv: p2.hrv } };
+    p1: { hr: p1.hr }, p2: { hr: p2.hr } };
 }
 
 function addIntakeContext(chemistry, intake) {
