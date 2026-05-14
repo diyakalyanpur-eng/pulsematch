@@ -3,9 +3,8 @@
 //
 // POST /api/session/init         { p1 }           → { sessionId, partnerToken }
 // POST /api/partner/:token       { p2 }           → { ok, sessionId }
-// GET  /api/session/:id/status                    → { ready, preview, paid }
-// POST /api/checkout             { sessionId, intake } → { url }
-// GET  /api/results/:id          ?stripe_session_id=  → { chemistry }
+// GET  /api/session/:id/status                    → { ready, preview }
+// GET  /api/results/:id                           → { chemistry }  (free)
 
 const express  = require('express');
 const cors     = require('cors');
@@ -70,9 +69,8 @@ function persistSession(sessionId, session) {
     p2:            session.p2   || null,
     chemistry:     session.chemistry || null,
     intake:        session.intake    || null,
-    paid:          !!session.paid,
-    paidAt:        session.paidAt        || null,
-    stripeSession: session.stripeSession || null,
+    paid:   !!session.paid,
+    paidAt: session.paidAt || null,
   };
   db.collection('sessions').doc(sessionId).set(doc, { merge: true })
     .catch(e => console.error('Firestore write error:', e.message));
@@ -182,8 +180,7 @@ app.post('/api/session/init', (req, res) => {
 
   const session = {
     p1, p2: null, chemistry: null, intake: null,
-    partnerToken, paid: false, createdAt: Date.now(),
-    paidAt: null, stripeSession: null,
+    partnerToken, paid: false, createdAt: Date.now(), paidAt: null,
   };
 
   sessions.set(sessionId, session);
@@ -228,78 +225,12 @@ app.get('/api/session/:id/status', (req, res) => {
   res.json({ ok: true, ready, preview, paid: !!session.paid });
 });
 
-// ── POST /api/checkout ────────────────────────────────────────────────
-app.post('/api/checkout', async (req, res) => {
-  const { sessionId, intake } = req.body;
-  const session = sessions.get(sessionId);
-  if (!session)           return res.status(404).json({ ok: false, error: 'Session not found' });
-  if (!session.chemistry) return res.status(400).json({ ok: false, error: 'Both scans not complete yet' });
-
-  if (intake) {
-    session.intake    = intake;
-    session.chemistry = addIntakeContext(session.chemistry, intake);
-    persistSession(sessionId, session);
-  }
-
-  const stripeKey = process.env.STRIPE_SECRET_KEY;
-  const origin    = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
-
-  if (!stripeKey) {
-    session.paid  = true;
-    session.paidAt = Date.now();
-    persistSession(sessionId, session);
-    return res.json({ ok: true, url: `${origin}/?session=${sessionId}&paid=dev` });
-  }
-
-  try {
-    const stripe   = require('stripe')(stripeKey);
-    const checkout = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [{ price_data: {
-        currency: 'eur',
-        product_data: { name: '💕 PulseMatch — Chemistry Report', description: 'Your full physiological synchrony analysis' },
-        unit_amount: 100,
-      }, quantity: 1 }],
-      mode:                'payment',
-      client_reference_id: sessionId,
-      success_url: `${origin}/?session=${sessionId}&paid={CHECKOUT_SESSION_ID}`,
-      cancel_url:  `${origin}/?session=${sessionId}&cancelled=true`,
-    });
-    res.json({ ok: true, url: checkout.url });
-  } catch (err) {
-    console.error('Stripe error:', err.message);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// ── GET /api/results/:sessionId ───────────────────────────────────────
-app.get('/api/results/:sessionId', async (req, res) => {
+// ── GET /api/results/:sessionId — free, no payment required ──────────
+app.get('/api/results/:sessionId', (req, res) => {
   const session = sessions.get(req.params.sessionId);
-  if (!session) return res.status(404).json({ ok: false, error: 'Session not found or expired' });
-
-  const stripeKey     = process.env.STRIPE_SECRET_KEY;
-  const stripeSession = req.query.stripe_session_id;
-
-  if (session.paid || !stripeKey)
-    return res.json({ ok: true, chemistry: session.chemistry });
-
-  if (!stripeSession)
-    return res.status(402).json({ ok: false, error: 'Payment required' });
-
-  try {
-    const stripe = require('stripe')(stripeKey);
-    const ss     = await stripe.checkout.sessions.retrieve(stripeSession);
-    if (ss.payment_status === 'paid' && ss.client_reference_id === req.params.sessionId) {
-      session.paid          = true;
-      session.paidAt        = Date.now();
-      session.stripeSession = stripeSession;
-      persistSession(req.params.sessionId, session);
-      return res.json({ ok: true, chemistry: session.chemistry });
-    }
-    res.status(402).json({ ok: false, error: 'Payment not verified' });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
+  if (!session)           return res.status(404).json({ ok: false, error: 'Session not found or expired' });
+  if (!session.chemistry) return res.status(400).json({ ok: false, error: 'Both scans not complete yet' });
+  res.json({ ok: true, chemistry: session.chemistry });
 });
 
 // ── Start servers ─────────────────────────────────────────────────────
@@ -318,7 +249,5 @@ if (fs.existsSync(CERT) && fs.existsSync(KEY)) {
       console.log(`   HTTPS → https://localhost:${HTTPS_PORT}`));
 }
 
-if (!process.env.STRIPE_SECRET_KEY)
-  console.log('   ⚠️  Dev mode — payment skipped (set STRIPE_SECRET_KEY to enable)\n');
 if (!db)
   console.log('   ⚠️  No Firestore — set GCP_SERVICE_ACCOUNT to enable persistence\n');

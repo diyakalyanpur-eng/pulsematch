@@ -50,7 +50,6 @@
     /* Content-heavy screens: start from top so overflow scrolls correctly.
        justify-content:center clips the top on small phones — this fixes it. */
     #screen-pass,
-    #screen-teaser,
     #screen-reveal,
     #screen-waiting,
     #screen-partner-done {
@@ -738,74 +737,7 @@
   </p>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
-     SCREEN 6: TEASER (blurred, pay to unlock)
-══════════════════════════════════════════════════════════ -->
-<div id="screen-teaser" class="screen">
-  <div style="text-align:center;">
-    <div class="tag">Your chemistry is ready</div>
-    <h2 class="serif" style="font-size:1.9rem;margin-top:12px;">Unlock your result</h2>
-  </div>
-
-  <div class="card teaser-card" style="max-width:360px;">
-    <div class="blurred-content">
-      <div class="big-score-blurred" id="teaser-score-blur">72</div>
-      <div style="text-align:center;font-size:1.3rem;margin-top:4px;">💕 Strong Spark</div>
-      <div style="height:40px;"></div>
-    </div>
-    <div class="teaser-blur-overlay">
-      <div class="teaser-lock">🔒</div>
-      <div class="teaser-blur-text">Your full chemistry analysis is hidden.<br>Unlock it below.</div>
-    </div>
-  </div>
-
-  <div class="teaser-hint">
-    <div id="teaser-emoji" class="teaser-hint-emoji">💕</div>
-    <div id="teaser-text" class="teaser-hint-text">We detected a meaningful signal between you two.</div>
-  </div>
-
-  <!-- Intake form — calibrates interpretation, collected before payment -->
-  <form class="intake-form" id="intake-form" onsubmit="return false;">
-    <div>
-      <h3 class="serif" style="font-size:1.25rem;margin-bottom:4px;">Tell us a little about your duo.</h3>
-      <p class="intake-sub">We use this only to calibrate the model — relationship type and physical proximity modulate expected synchrony per the literature.</p>
-    </div>
-
-    <hr class="intake-divider">
-
-    <div class="intake-section">
-      <div class="intake-label">Your first names (optional)</div>
-      <div class="intake-names">
-        <input class="intake-input" id="name1" type="text" placeholder="Person 1, e.g. Maya" maxlength="20" autocomplete="off">
-        <input class="intake-input" id="name2" type="text" placeholder="Person 2, e.g. Leo" maxlength="20" autocomplete="off">
-      </div>
-    </div>
-
-    <div class="intake-section">
-      <div class="intake-label">Relationship status</div>
-      <div class="chip-group" id="chips-relationship">
-        <button type="button" class="chip active" data-val="established">Established couple</button>
-        <button type="button" class="chip" data-val="dating">Dating</button>
-        <button type="button" class="chip" data-val="justmet">Just met</button>
-      </div>
-    </div>
-
-    <div class="intake-section">
-      <div class="intake-label">Physical proximity during scan</div>
-      <div class="chip-group" id="chips-proximity">
-        <button type="button" class="chip active" data-val="sameroom">Same room</button>
-        <button type="button" class="chip" data-val="remote">Remote / separate</button>
-      </div>
-    </div>
-  </form>
-
-  <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:380px;align-items:center;">
-    <button class="btn btn-pay" id="btn-pay" style="width:100%;font-size:1.05rem;padding:18px;">
-      🔓 Reveal for €1
-    </button>
-    <p class="muted" style="text-align:center;">Secure payment via Stripe · Results shown instantly</p>
-  </div>
-</div>
+<!-- Screen 6 (teaser/paywall) removed — results are now free -->
 
 <!-- ══════════════════════════════════════════════════════════
      SCREEN 7: REVEAL
@@ -879,17 +811,14 @@
 import { RPPGLite } from './rppg-lite.js';
 
 // ── State ────────────────────────────────────────────────
-let scanner       = null;
-let videoStream   = null;
-let resultP1      = null;
-let sessionId     = null;
-let partnerToken  = null;
-let partnerUrl    = null;
-let previewData   = null;
-let countdownInt  = null;
-let pollInterval       = null;
-let teaserPollInterval = null;
-let intakeData    = { name1: '', name2: '', relationship: 'established', proximity: 'sameroom' };
+let scanner      = null;
+let videoStream  = null;
+let resultP1     = null;
+let sessionId    = null;
+let partnerToken = null;
+let partnerUrl   = null;
+let countdownInt = null;
+let pollInterval = null;
 
 const SCAN_DURATION = 30;
 const CIRCUMFERENCE = 150.8;
@@ -898,22 +827,9 @@ const CIRCUMFERENCE = 150.8;
 const video    = document.getElementById('video');
 const btnStart = document.getElementById('btn-start');
 const btnReady = document.getElementById('btn-ready');
-const btnPay   = document.getElementById('btn-pay');
 const btnShare = document.getElementById('btn-share');
 const btnAgain = document.getElementById('btn-again');
 
-// ── Chip selector ─────────────────────────────────────────
-function initChips(groupId, stateKey) {
-  document.getElementById(groupId).addEventListener('click', e => {
-    const chip = e.target.closest('.chip');
-    if (!chip) return;
-    document.querySelectorAll(`#${groupId} .chip`).forEach(c => c.classList.remove('active'));
-    chip.classList.add('active');
-    intakeData[stateKey] = chip.dataset.val;
-  });
-}
-initChips('chips-relationship', 'relationship');
-initChips('chips-proximity',    'proximity');
 
 // ── Screen switcher ──────────────────────────────────────
 function showScreen(id) {
@@ -1105,7 +1021,23 @@ document.getElementById('btn-reshare').addEventListener('click', async () => {
   }
 });
 
-// ── Submit P2 result + proceed to teaser ──────────────────
+// ── Fetch results and show reveal (results are free) ─────
+async function fetchAndShowReveal() {
+  try {
+    const r    = await fetch(`/api/results/${sessionId}`);
+    const data = await r.json();
+    if (data.ok && data.chemistry) {
+      showReveal(data.chemistry);
+    } else {
+      showScreen('screen-home');
+    }
+  } catch (e) {
+    console.error('Error fetching results:', e);
+    showScreen('screen-home');
+  }
+}
+
+// ── Submit P2 result + show reveal ───────────────────────
 async function submitP2AndWait(resultP2) {
   // Same-device P2 — stop the background poll started on the pass screen
   if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
@@ -1118,18 +1050,11 @@ async function submitP2AndWait(resultP2) {
     });
   } catch (e) { console.error('Partner submit failed:', e); }
 
-  // Get preview from status
-  try {
-    const r = await fetch(`/api/session/${sessionId}/status`);
-    const d = await r.json();
-    if (d.ready) previewData = d.preview;
-  } catch (_) {}
-
-  await new Promise(r => setTimeout(r, 2800));
-  showTeaser();
+  await new Promise(r => setTimeout(r, 2200));
+  await fetchAndShowReveal();
 }
 
-// ── Poll until partner scans (remote flow) ────────────────
+// ── Poll until partner scans, then show reveal ────────────
 function startPolling() {
   if (pollInterval) clearInterval(pollInterval);
   pollInterval = setInterval(async () => {
@@ -1138,83 +1063,13 @@ function startPolling() {
       const d = await r.json();
       if (d.ready) {
         clearInterval(pollInterval);
-        previewData = d.preview;
         showScreen('screen-calc');
         await new Promise(r => setTimeout(r, 2200));
-        showTeaser();
+        await fetchAndShowReveal();
       }
     } catch (_) {}
   }, 2500);
 }
-
-function showTeaser() {
-  // Fill teaser with hint data (not the real score)
-  const hintMap = {
-    high:   { text: 'We detected a strong physiological signal between you two.', emoji: '🔥' },
-    medium: { text: 'We detected a meaningful connection in your rhythms.',       emoji: '💕' },
-    low:    { text: 'Your bodies have spoken. The truth is waiting below.',        emoji: '✨' },
-  };
-  const hint = hintMap[previewData?.hint] || hintMap.medium;
-  document.getElementById('teaser-emoji').textContent   = previewData?.emoji || hint.emoji;
-  document.getElementById('teaser-text').textContent    = hint.text;
-  document.getElementById('teaser-score-blur').textContent = '??';
-  showScreen('screen-teaser');
-  startTeaserPolling();
-}
-
-// ── Poll while on teaser: if partner already paid, show reveal for free ──
-function startTeaserPolling() {
-  if (!sessionId) return;
-  if (teaserPollInterval) clearInterval(teaserPollInterval);
-  teaserPollInterval = setInterval(async () => {
-    try {
-      const r = await fetch(`/api/session/${sessionId}/status`);
-      const d = await r.json();
-      if (d.paid) {
-        clearInterval(teaserPollInterval);
-        teaserPollInterval = null;
-        // Session already unlocked — fetch results directly (no Stripe needed)
-        const res2 = await fetch(`/api/results/${sessionId}`);
-        const data = await res2.json();
-        if (data.ok && data.chemistry) {
-          // Capture any names the user may have typed before partner paid
-          intakeData.name1 = document.getElementById('name1').value.trim() || intakeData.name1;
-          intakeData.name2 = document.getElementById('name2').value.trim() || intakeData.name2;
-          showReveal(data.chemistry);
-        }
-      }
-    } catch (_) {}
-  }, 3000);
-}
-
-btnPay.addEventListener('click', async () => {
-  // Stop polling — this device is paying, result will arrive via Stripe redirect
-  if (teaserPollInterval) { clearInterval(teaserPollInterval); teaserPollInterval = null; }
-  btnPay.disabled = true;
-  btnPay.textContent = 'Opening payment…';
-
-  // Capture names from inputs just before payment
-  intakeData.name1 = document.getElementById('name1').value.trim();
-  intakeData.name2 = document.getElementById('name2').value.trim();
-
-  try {
-    const resp = await fetch('/api/checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, intake: intakeData }),
-    });
-    const data = await resp.json();
-    if (data.url) {
-      window.location.href = data.url;
-    } else {
-      throw new Error(data.error || 'No checkout URL');
-    }
-  } catch (e) {
-    alert('Payment error: ' + e.message);
-    btnPay.disabled = false;
-    btnPay.textContent = '🔓 Reveal for €1';
-  }
-});
 
 btnShare.addEventListener('click', async () => {
   const score = document.getElementById('reveal-score-num').textContent;
@@ -1229,16 +1084,15 @@ btnShare.addEventListener('click', async () => {
 });
 
 btnAgain.addEventListener('click', () => {
-  if (teaserPollInterval) { clearInterval(teaserPollInterval); teaserPollInterval = null; }
-  if (pollInterval)       { clearInterval(pollInterval);       pollInterval = null; }
-  resultP1 = null; sessionId = null; previewData = null;
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+  resultP1 = null; sessionId = null;
   scanner = null;
   document.getElementById('btn-start').disabled = false;
   document.getElementById('btn-start').textContent = '💗 Measure Our Chemistry';
   showScreen('screen-home');
 });
 
-// ── Reveal animation ─────────────────────────────────────
+// ── Share result ─────────────────────────────────────────
 function animateScore(targetScore) {
   const el  = document.getElementById('reveal-score-num');
   const cEl = document.getElementById('score-circle-el');
@@ -1279,36 +1133,11 @@ function showReveal(chemistry) {
   animateBars(chemistry);
 }
 
-// ── Handle return from Stripe ─────────────────────────────
-async function handleReturnFromStripe(urlSession, stripeSession) {
-  showScreen('screen-calc');
-  document.querySelector('#screen-calc h2').textContent = 'Verifying payment…';
-
-  try {
-    const params = new URLSearchParams({ stripe_session_id: stripeSession || '' });
-    const resp   = await fetch(`/api/results/${urlSession}?${params}`);
-    const data   = await resp.json();
-
-    if (data.ok && data.chemistry) {
-      await new Promise(r => setTimeout(r, 1200));
-      showReveal(data.chemistry);
-    } else {
-      alert('Could not verify payment. Contact support.');
-      showScreen('screen-home');
-    }
-  } catch (e) {
-    alert('Error loading results: ' + e.message);
-    showScreen('screen-home');
-  }
-}
 
 // ── Init: check URL params ────────────────────────────────
 (async function init() {
-  const params    = new URLSearchParams(window.location.search);
-  const urlSess   = params.get('session');
-  const paid      = params.get('paid');
-  const cancelled = params.get('cancelled');
-  const pToken    = params.get('partner');  // P2 remote flow
+  const params = new URLSearchParams(window.location.search);
+  const pToken = params.get('partner');  // P2 remote flow
 
   window.history.replaceState({}, '', '/');
 
@@ -1319,7 +1148,7 @@ async function handleReturnFromStripe(urlSession, stripeSession) {
       await startCamera();
       const resultP2 = await runScan(2);
 
-      // Submit scan — server now returns sessionId so P2 can proceed
+      // Submit scan — server returns sessionId so P2 can see results
       const submitResp = await fetch(`/api/partner/${pToken}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1329,39 +1158,16 @@ async function handleReturnFromStripe(urlSession, stripeSession) {
 
       if (submitData.ok && submitData.sessionId) {
         sessionId = submitData.sessionId;
-
-        // Fetch preview for teaser hint
-        try {
-          const r = await fetch(`/api/session/${sessionId}/status`);
-          const d = await r.json();
-          if (d.ready) previewData = d.preview;
-        } catch (_) {}
-
-        // Show calculating animation, then teaser
         showScreen('screen-calc');
         await new Promise(r => setTimeout(r, 2800));
-        showTeaser();
+        await fetchAndShowReveal();
       } else {
-        // Fallback if server doesn't return session data
         showScreen('screen-partner-done');
       }
     } catch (e) {
       console.error('P2 remote scan error:', e);
       showScreen('screen-partner-done');
     }
-    return;
-  }
-
-  if (cancelled) {
-    sessionId = urlSess;
-    previewData = { hint: 'medium', emoji: '💕' };
-    showTeaser();
-    return;
-  }
-
-  if (urlSess && paid) {
-    // Returned from Stripe with payment
-    handleReturnFromStripe(urlSess, paid === 'dev' ? null : paid);
     return;
   }
 
