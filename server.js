@@ -27,10 +27,12 @@ let db = null;
 function initFirestore() {
   const svcAcct = process.env.GCP_SERVICE_ACCOUNT;
   if (svcAcct) {
+    // Explicit JSON key — used outside GCP (e.g. local dev, Railway)
     try {
       const credentials = JSON.parse(svcAcct);
       db = new Firestore({
         projectId:   credentials.project_id,
+        databaseId:  process.env.FIRESTORE_DB || '(default)',
         credentials: {
           client_email: credentials.client_email,
           private_key:  credentials.private_key,
@@ -40,12 +42,17 @@ function initFirestore() {
     } catch (e) {
       console.warn('⚠️   GCP_SERVICE_ACCOUNT JSON parse failed:', e.message);
     }
-  } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    // Standard ADC path — Firestore picks it up automatically
-    db = new Firestore({ projectId: process.env.GCP_PROJECT_ID });
-    console.log('🔥  Firestore connected (GOOGLE_APPLICATION_CREDENTIALS)');
   } else {
-    console.warn('⚠️   No Firestore credentials — data will NOT be persisted.');
+    // Cloud Run / GCE / GKE — Application Default Credentials picked up automatically
+    try {
+      db = new Firestore({
+        projectId:  process.env.GCP_PROJECT_ID,   // optional — auto-detected on Cloud Run
+        databaseId: process.env.FIRESTORE_DB || '(default)',
+      });
+      console.log('🔥  Firestore connected (Application Default Credentials)');
+    } catch (e) {
+      console.warn('⚠️   Firestore init failed:', e.message);
+    }
   }
 }
 initFirestore();
