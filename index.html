@@ -1113,8 +1113,8 @@ function animateBars(chemistry) {
 
 function showReveal(chemistry) {
   // Apply names if provided, fall back to generic labels
-  const n1 = chemistry.intake?.name1 || intakeData.name1 || 'Person 1';
-  const n2 = chemistry.intake?.name2 || intakeData.name2 || 'Person 2';
+  const n1 = chemistry.intake?.name1 || 'Person 1';
+  const n2 = chemistry.intake?.name2 || 'Person 2';
   document.getElementById('p1-name-label').textContent = n1;
   document.getElementById('p2-name-label').textContent = n2;
 
