@@ -39,11 +39,25 @@
       position: fixed; inset: 0;
       display: none; flex-direction: column;
       align-items: center; justify-content: center;
-      padding: calc(20px + var(--safe-top)) 24px calc(20px + var(--safe-bot));
+      padding: calc(20px + var(--safe-top)) 20px calc(20px + var(--safe-bot));
       overflow-y: auto;
+      /* scroll padding so content isn't hidden under safe areas */
+      scroll-padding-top: calc(20px + var(--safe-top));
       z-index: 10;
     }
     .screen.active { display: flex; }
+
+    /* Content-heavy screens: start from top so overflow scrolls correctly.
+       justify-content:center clips the top on small phones — this fixes it. */
+    #screen-pass,
+    #screen-teaser,
+    #screen-reveal,
+    #screen-waiting,
+    #screen-partner-done {
+      justify-content: flex-start;
+      padding-top: calc(28px + var(--safe-top));
+      padding-bottom: calc(28px + var(--safe-bot));
+    }
 
     /* ── Particle canvas (home background) ─────────────────── */
     #particle-canvas {
@@ -160,17 +174,17 @@
     /* ── ═══════════════════════════════════════════════════════
          HOME SCREEN
     ══════════════════════════════════════════════════════════ */
-    #screen-home { z-index: 10; gap: 0; justify-content: flex-end; padding-bottom: calc(48px + var(--safe-bot)); }
-    #screen-home .hero { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+    #screen-home { z-index: 10; gap: 0; justify-content: flex-end; padding-bottom: calc(40px + var(--safe-bot)); }
+    #screen-home .hero { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
 
-    .home-logo { font-size: 4rem; animation: float 3.8s ease-in-out infinite; }
-    .home-title { font-family: 'Playfair Display', serif; font-size: 2.6rem; text-align: center; background: linear-gradient(135deg, #fff 40%, #ff9eb5); -webkit-background-clip: text; -webkit-text-fill-color: transparent; line-height: 1.1; }
-    .home-sub { color: var(--text2); text-align: center; font-size: 1rem; line-height: 1.6; max-width: 300px; }
+    .home-logo  { font-size: clamp(2.6rem, 10vw, 4rem); animation: float 3.8s ease-in-out infinite; }
+    .home-title { font-family: 'Playfair Display', serif; font-size: clamp(1.9rem, 7vw, 2.6rem); text-align: center; background: linear-gradient(135deg, #fff 40%, #ff9eb5); -webkit-background-clip: text; -webkit-text-fill-color: transparent; line-height: 1.1; }
+    .home-sub   { color: var(--text2); text-align: center; font-size: clamp(0.88rem, 3.5vw, 1rem); line-height: 1.6; max-width: 300px; }
 
-    .how-it-works { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 340px; margin: 20px 0; }
-    .how-step { display: flex; align-items: center; gap: 14px; }
-    .step-num { width: 30px; height: 30px; border-radius: 50%; background: rgba(232,52,104,0.15); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--accent2); flex-shrink: 0; }
-    .step-text { font-size: 0.88rem; color: var(--text2); }
+    .how-it-works { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 340px; margin: 16px 0; }
+    .how-step { display: flex; align-items: center; gap: 12px; }
+    .step-num { width: 30px; height: 30px; min-width: 30px; border-radius: 50%; background: rgba(232,52,104,0.15); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--accent2); flex-shrink: 0; }
+    .step-text { font-size: 0.85rem; color: var(--text2); }
 
     /* ── ═══════════════════════════════════════════════════════
          SCAN SCREENS
@@ -214,16 +228,17 @@
 
     /* Live HR display */
     .scan-bottom {
-      position: fixed; bottom: calc(32px + var(--safe-bot)); left: 0; right: 0;
+      position: fixed; bottom: calc(24px + var(--safe-bot)); left: 0; right: 0;
       display: flex; flex-direction: column; align-items: center; gap: 6px;
       z-index: 15;
+      padding: 0 16px;
     }
     .live-hr-card {
       background: rgba(9,6,18,0.82); backdrop-filter: blur(16px);
       border: 1px solid var(--border); border-radius: 20px;
-      padding: 14px 28px; text-align: center;
+      padding: 12px 28px; text-align: center;
     }
-    .live-hr-num { font-size: 2.6rem; font-weight: 700; line-height: 1; }
+    .live-hr-num { font-size: clamp(2rem, 7vw, 2.6rem); font-weight: 700; line-height: 1; }
     .live-hr-unit { font-size: 0.75rem; color: var(--text2); letter-spacing: 0.08em; }
     .live-hr-heart { display: inline-block; font-size: 1.1rem; animation: heartbeat 1s ease-in-out infinite; }
     .scan-instruction { font-size: 0.8rem; color: var(--text2); text-align: center; }
@@ -255,7 +270,7 @@
     /* ── ═══════════════════════════════════════════════════════
          PASS PHONE SCREEN
     ══════════════════════════════════════════════════════════ */
-    #screen-pass { z-index: 14; background: linear-gradient(180deg, #0d0920 0%, #1a0a1e 100%); gap: 28px; }
+    #screen-pass { z-index: 14; background: linear-gradient(180deg, #0d0920 0%, #1a0a1e 100%); gap: 20px; }
     .pass-hearts { font-size: 3.6rem; display: flex; gap: 14px; align-items: center; }
     .pass-heart-divider { font-size: 1.4rem; color: var(--accent); animation: heartbeat 1.2s ease-in-out infinite; }
 
@@ -335,10 +350,10 @@
     .reveal-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 340px; }
 
     /* ── Share link section (pass screen) ──────────────────── */
-    .share-divider { display:flex;align-items:center;gap:12px;width:100%;max-width:320px;color:var(--text2);font-size:0.8rem; }
+    .share-divider { display:flex;align-items:center;gap:12px;width:100%;max-width:340px;color:var(--text2);font-size:0.8rem; }
     .share-divider::before,.share-divider::after { content:'';flex:1;height:1px;background:rgba(255,255,255,0.08); }
     .share-link-box {
-      width:100%;max-width:320px;
+      width:100%;max-width:340px;
       background:var(--card);border:1px solid var(--border);border-radius:18px;
       padding:18px;display:flex;flex-direction:column;align-items:center;gap:14px;
     }
@@ -434,6 +449,101 @@
       font-size: 0.78rem; color: var(--text2); line-height: 1.5;
       text-align: center; padding: 0 4px;
     }
+
+    /* ══════════════════════════════════════════════════════
+         RESPONSIVE — short phones (height ≤ 700px)
+    ══════════════════════════════════════════════════════ */
+    @media (max-height: 700px) {
+      #screen-home { padding-bottom: calc(24px + var(--safe-bot)); }
+      #screen-home .hero { gap: 6px; }
+      .how-it-works { margin: 10px 0; gap: 7px; }
+      .home-logo { font-size: 2.4rem; }
+
+      #screen-pass   { gap: 16px; }
+      #screen-teaser { gap: 14px; }
+      #screen-waiting, #screen-partner-done { gap: 16px; }
+      #screen-calc { gap: 16px; }
+
+      .pass-hearts { font-size: 2.6rem; }
+      .card { padding: 20px 18px; }
+      .share-link-box { gap: 10px; padding: 14px; }
+      .intake-form { gap: 14px; padding: 18px 16px; }
+
+      /* Scan: pull tips up slightly on short screens */
+      .scan-bottom { bottom: calc(14px + var(--safe-bot)); gap: 4px; }
+      .scan-tips-card { padding: 9px 16px; gap: 5px; }
+      .scan-tips-row  { font-size: 0.78rem; }
+      .live-hr-card   { padding: 9px 22px; }
+    }
+
+    /* ══════════════════════════════════════════════════════
+         RESPONSIVE — very short phones (height ≤ 580px)
+         e.g. landscape, or older small Android devices
+    ══════════════════════════════════════════════════════ */
+    @media (max-height: 580px) {
+      .scan-tips-card { display: none; } /* hide tips, keep HR only */
+      .scan-bottom { bottom: calc(10px + var(--safe-bot)); }
+      .face-oval { transform: translate(-50%, -62%); }
+      .how-it-works { display: none; } /* hide steps on very short home */
+      #screen-home .hero { gap: 8px; }
+    }
+
+    /* ══════════════════════════════════════════════════════
+         RESPONSIVE — narrow phones (width ≤ 375px)
+         e.g. iPhone SE, small Android
+    ══════════════════════════════════════════════════════ */
+    @media (max-width: 375px) {
+      .screen { padding-left: 16px; padding-right: 16px; }
+
+      .card { padding: 18px 14px; border-radius: 18px; }
+      .btn  { padding: 14px 20px; font-size: 0.95rem; }
+
+      .share-link-box { padding: 14px 12px; border-radius: 14px; }
+      .intake-form    { padding: 16px 14px; border-radius: 18px; gap: 14px; }
+      .chip           { padding: 8px 12px; font-size: 0.78rem; }
+      .intake-input   { padding: 10px 12px; font-size: 0.88rem; }
+
+      .score-circle { width: 118px; height: 118px; }
+      .score-number { font-size: 2.1rem; }
+      .reveal-label { font-size: 1.35rem; }
+      .reveal-tagline { font-size: 0.85rem; }
+      .reveal-detail  { font-size: 0.80rem; }
+
+      .pass-hearts { font-size: 2.4rem; gap: 10px; }
+
+      /* Scan tips smaller */
+      .scan-tips-card { width: calc(100% - 24px); padding: 9px 14px; }
+      .scan-tips-row  { font-size: 0.76rem; gap: 8px; }
+    }
+
+    /* ══════════════════════════════════════════════════════
+         RESPONSIVE — very narrow phones (width ≤ 320px)
+         e.g. iPhone SE 1st gen
+    ══════════════════════════════════════════════════════ */
+    @media (max-width: 320px) {
+      .home-title { font-size: 1.75rem; }
+      .home-sub   { font-size: 0.82rem; }
+      .step-text  { font-size: 0.80rem; }
+
+      .card { padding: 14px 12px; }
+      .btn  { padding: 13px 16px; font-size: 0.9rem; }
+
+      .score-circle { width: 104px; height: 104px; }
+      .score-number { font-size: 1.9rem; }
+
+      .metric-name  { font-size: 0.72rem; }
+      .chip         { padding: 7px 10px; font-size: 0.74rem; }
+
+      /* QR code override via JS is handled below, but cap the container */
+      #qr-container { transform: scale(0.82); transform-origin: center top; }
+    }
+
+    /* ══════════════════════════════════════════════════════
+         ENSURE MINIMUM 44px TOUCH TARGETS
+    ══════════════════════════════════════════════════════ */
+    .btn { min-height: 44px; }
+    .chip { min-height: 38px; }
+    .copy-url-btn { min-height: 38px; }
   </style>
 </head>
 <body>
@@ -701,7 +811,7 @@
      SCREEN 7: REVEAL
 ══════════════════════════════════════════════════════════ -->
 <div id="screen-reveal" class="screen">
-  <div class="card reveal-card" style="max-width:420px;display:flex;flex-direction:column;gap:0;">
+  <div class="card reveal-card" style="max-width:420px;width:100%;display:flex;flex-direction:column;gap:0;">
 
     <!-- Score circle -->
     <div id="score-circle-el" class="score-circle" style="--score-pct:0%;">
